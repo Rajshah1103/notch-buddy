@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import GitHubKit
 import SwiftUI
 
 // MARK: - Shared pieces
@@ -106,6 +107,12 @@ struct SettingsView: View {
     @StateObject private var permissions = PermissionsModel()
     let showWelcome: () -> Void
 
+    private var githubStatus: String {
+        if GitHubToken.stored() != nil { return "Using the token saved in your Keychain" }
+        if settings.githubUsesCommandLine, GitHubToken.fromCommandLine() != nil { return "Using your GitHub CLI login" }
+        return "Not connected"
+    }
+
     var body: some View {
         Form {
             Section("General") {
@@ -132,10 +139,26 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Activity") {
-                Toggle("Show Claude Code activity in the notch", isOn: $settings.showClaudeActivity)
+            Section("Integrations") {
+                Toggle("Claude Code activity", isOn: $settings.showClaudeActivity)
                 Text("Reads Claude Code's local session files to show when it is working and how many tokens it used today. Nothing leaves your Mac.")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("GitHub pull requests", isOn: $settings.showGitHub)
+                if settings.showGitHub {
+                    Toggle("Use my GitHub CLI login when no token is saved", isOn: $settings.githubUsesCommandLine)
+                    HStack {
+                        Text(githubStatus).font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        if GitHubToken.stored() != nil {
+                            Button("Remove saved token") {
+                                GitHubToken.clear()
+                                settings.objectWillChange.send()
+                            }.controlSize(.small)
+                        }
+                    }
+                    Text("Connect from the GitHub chip in the notch, where you can paste a token.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
 
             Section("Permissions") {
@@ -156,7 +179,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 760)
+        .frame(width: 520, height: 820)
         .onAppear { permissions.startPolling() }
         .onDisappear { permissions.stopPolling() }
     }

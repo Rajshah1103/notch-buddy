@@ -7,14 +7,15 @@ import WindowEngine
 /// Apps first, then what is inside the selected app. Everything fits on screen: no scrolling.
 struct SwitcherView: View {
     @ObservedObject var model: WindowsModel
-    @ObservedObject var claude: ClaudeModel
+    @ObservedObject var hub: IntegrationHub
     let notch: NotchState
 
     @State private var selectedID: Int32?
     /// Only the preview pane observes this, so moving across rows does not re-render the list.
     @StateObject private var hover = HoverStore()
 
-    @State private var showingClaude = PreviewSeed.showClaude
+    /// The integration whose panel replaces the app list, if any.
+    @State private var openIntegration: String? = PreviewSeed.integration
     @State private var searching = false
     @State private var query = ""
     @State private var selection = 0
@@ -32,8 +33,8 @@ struct SwitcherView: View {
                 SearchPanel(model: model, query: $query, selection: $selection, focus: $fieldFocused,
                             onOpen: open, onClose: { notch.collapse() })
                     .padding(.top, 8)
-            } else if showingClaude {
-                ClaudePanel(model: claude).padding(.top, 10)
+            } else if let id = openIntegration, let integration = hub.integration(id) {
+                integration.panel(notch: notch).padding(.top, 10)
             } else {
                 AppDock(groups: model.groups, icons: model.icons, selectedID: selected?.id,
                         onSelect: { selectedID = $0 }, onOpen: open)
@@ -49,7 +50,7 @@ struct SwitcherView: View {
         .overlay(alignment: .bottom) { Hint(model: model).padding(.bottom, 8) }
         .onReceive(notch.$isExpanded) { expanded in
             // Start each visit from the default: the app you are in, nothing hovered.
-            if !expanded { selectedID = nil; hover.entry = nil; showingClaude = false }
+            if !expanded { selectedID = nil; hover.entry = nil; openIntegration = nil }
         }
         .onReceive(notch.$isSearching) { isSearching in
             searching = isSearching
@@ -85,7 +86,11 @@ struct SwitcherView: View {
                             notch.collapse()
                         }
                     }
-                    ClaudeChip(model: claude, isOpen: showingClaude) { showingClaude.toggle() }
+                    ForEach(hub.visible, id: \.id) { integration in
+                        integration.chip(isOpen: openIntegration == integration.id) {
+                            openIntegration = openIntegration == integration.id ? nil : integration.id
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, 16)
@@ -117,7 +122,7 @@ struct SwitcherView: View {
 /// Lets the snapshot tool start the search view with text already typed.
 enum PreviewSeed {
     nonisolated(unsafe) static var query: String?
-    nonisolated(unsafe) static var showClaude = false
+    nonisolated(unsafe) static var integration: String?
 }
 
 enum Layout {
@@ -193,7 +198,7 @@ private struct DockItem: View {
 }
 
 /// Feedback begins on mouse-down, not on release.
-private struct PressStyle: ButtonStyle {
+struct PressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.95 : 1)

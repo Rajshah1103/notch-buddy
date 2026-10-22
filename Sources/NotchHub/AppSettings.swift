@@ -55,6 +55,9 @@ final class AppSettings: ObservableObject {
     /// How long the pointer must rest on the notch before it opens, in milliseconds.
     @Published var hoverDelayMs: Double { didSet { defaults.set(hoverDelayMs, forKey: "hoverDelayMs"); changed() } }
     @Published var showClaudeActivity: Bool { didSet { defaults.set(showClaudeActivity, forKey: "showClaudeActivity"); changed() } }
+    @Published var showGitHub: Bool { didSet { defaults.set(showGitHub, forKey: "showGitHub"); changed() } }
+    /// Fall back to the GitHub command line tool's login when no token has been pasted.
+    @Published var githubUsesCommandLine: Bool { didSet { defaults.set(githubUsesCommandLine, forKey: "githubUsesCommandLine"); changed() } }
     @Published var searchHotKey: HotKeyBinding { didSet {
         if let data = try? JSONEncoder().encode(searchHotKey) { defaults.set(data, forKey: "searchHotKey") }
         changed()
@@ -71,6 +74,8 @@ final class AppSettings: ObservableObject {
     private init() {
         hoverDelayMs = defaults.object(forKey: "hoverDelayMs") as? Double ?? 60
         showClaudeActivity = defaults.object(forKey: "showClaudeActivity") as? Bool ?? true
+        showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
+        githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true
         searchHotKey = (defaults.data(forKey: "searchHotKey").flatMap { try? JSONDecoder().decode(HotKeyBinding.self, from: $0) }) ?? .default
     }
 

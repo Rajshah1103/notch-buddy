@@ -79,7 +79,7 @@ struct ClaudeChip: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .accessibilityLabel("Claude usage")
+        .accessibilityLabel("Claude usage, \(model.snapshot.isWorking ? "working now" : "idle"), \(TokenFormat.short(model.snapshot.tokensToday)) tokens today")
         .accessibilityHint("Shows Claude Code sessions and tokens used today")
     }
 }
@@ -141,7 +141,7 @@ private struct SessionRow: View {
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.project).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                Text(isWorking ? "Working now" : "Active \(Self.ago(session.lastActivity))")
+                Text(isWorking ? "Working now" : "Active \(RelativeTime.ago(session.lastActivity))")
                     .font(.system(size: 11))
                     .foregroundStyle(isWorking ? Theme.claude : Theme.textSecondary)
             }
@@ -153,15 +153,6 @@ private struct SessionRow: View {
         .padding(.horizontal, 10)
         .frame(height: 38)
         .accessibilityElement(children: .combine)
-    }
-
-    static func ago(_ date: Date) -> String {
-        let seconds = Int(Date().timeIntervalSince(date))
-        switch seconds {
-        case ..<60: return "just now"
-        case ..<3600: return "\(seconds / 60)m ago"
-        default: return "\(seconds / 3600)h ago"
-        }
     }
 }
 

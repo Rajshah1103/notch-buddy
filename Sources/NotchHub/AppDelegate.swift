@@ -8,12 +8,16 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windows = WindowsModel()
     private let claude = ClaudeModel()
+    private let github = GitHubModel()
+    private lazy var hub = IntegrationHub(integrations: [
+        ClaudeIntegration(model: claude),
+        GitHubIntegration(model: github),
+    ])
     private let settings = AppSettings.shared
     private let presenter = WindowPresenter()
     private var notch: NotchManager?
     private var statusItem: NSStatusItem?
     private var searchHotKey: HotKey?
-    private var claudeRunning = false
     private var registeredHotKey: HotKeyBinding?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -21,11 +25,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let model = windows
         let claudeModel = claude
+        let hub = hub
         notch = NotchManager(
             expandedSize: CGSize(width: 1000, height: 440),
             onPrefetch: { model.refresh(previews: false) },
-            onExpand: { model.refresh(previews: true) },
-            content: { state in AnyView(SwitcherView(model: model, claude: claudeModel, notch: state)) },
+            onExpand: { model.refresh(previews: true); hub.refresh() },
+            content: { state in AnyView(SwitcherView(model: model, hub: hub, notch: state)) },
             liveContent: { state in AnyView(ClaudeLiveView(model: claudeModel, notch: state)) }
         )
         PerfProbe.startStallWatchdog()
@@ -54,13 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applySettings() {
         notch?.hoverDelay = settings.hoverDelayMs / 1000
 
-        if settings.showClaudeActivity, !claudeRunning {
-            claudeRunning = true
-            claude.start()
-        } else if !settings.showClaudeActivity, claudeRunning {
-            claudeRunning = false
-            claude.stop()
-        }
+        hub.apply()      // start or stop each integration to match Settings
 
         // Re-register the search shortcut only when it changed (dropping the old one first).
         if registeredHotKey != settings.searchHotKey {

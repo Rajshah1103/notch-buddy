@@ -1,5 +1,6 @@
 import AppKit
 import ClaudeUsage
+import GitHubKit
 import NotchCore
 import SwiftUI
 import WindowEngine
@@ -9,7 +10,8 @@ import WindowEngine
 @MainActor
 enum Preview {
     static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?,
-                       claudePanel: Bool = false, live: Bool = false) {
+                       claudePanel: Bool = false, githubPanel: Bool = false, githubConnect: Bool = false,
+                       live: Bool = false) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
@@ -24,13 +26,16 @@ enum Preview {
 
         let claude = ClaudeModel()
         claude.loadForPreview(sampleClaude())
-        PreviewSeed.showClaude = claudePanel
+        let github = GitHubModel()
+        github.loadForPreview(githubConnect ? nil : sampleGitHub(), needsToken: githubConnect)
+        let hub = IntegrationHub(integrations: [ClaudeIntegration(model: claude), GitHubIntegration(model: github)])
+        PreviewSeed.integration = claudePanel ? "claude" : githubPanel ? "github" : nil
         let model = WindowsModel()
         model.loadForPreview(snapshot, browsers: demo ? sampleBrowsers(snapshot) : [:], frontApp: app)
 
         if live { renderLive(to: path, claude: claude, state: state, light: light); return }
 
-        let root = SwitcherView(model: model, claude: claude, notch: state)
+        let root = SwitcherView(model: model, hub: hub, notch: state)
             .frame(width: size.width, height: size.height)
             // Stand-in for the system material, which only exists inside a real window.
             .background(
@@ -94,6 +99,29 @@ enum Preview {
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
             print("Wrote \(path)")
         }
+    }
+
+    /// Invented pull requests, so a render never shows real work.
+    private static func sampleGitHub() -> GitHubSnapshot {
+        let now = Date()
+        func pr(_ n: Int, _ title: String, _ repo: String, _ author: String, _ checks: CheckState,
+                draft: Bool = false, decision: String? = nil, ago: TimeInterval) -> PullRequest {
+            PullRequest(id: "PR\(n)", number: n, title: title, url: URL(string: "https://github.com/\(repo)/pull/\(n)")!,
+                        repository: repo, author: author, isDraft: draft, reviewDecision: decision, checks: checks,
+                        updatedAt: now.addingTimeInterval(-ago))
+        }
+        let review = [
+            pr(482, "Add retry with backoff to the payments client", "acme/api-gateway", "mira", .pending, ago: 1_500),
+            pr(477, "Fix race in session cache eviction", "acme/api-gateway", "dev-k", .passing, ago: 9_000),
+            pr(931, "Move onboarding copy into the CMS", "acme/web", "sana", .passing, ago: 30_000),
+            pr(212, "Bump terraform provider to 5.4", "acme/infra", "li", .failing, ago: 86_400 * 2),
+        ]
+        let mine = [
+            pr(488, "Notch Hub: search across windows and tabs", "raj/notch-hub", "raj", .passing, decision: "APPROVED", ago: 3_000),
+            pr(490, "Draft: plugin framework", "raj/notch-hub", "raj", .none, draft: true, ago: 800),
+            pr(61, "Reduce hover cost with core animation", "raj/notch-hub", "raj", .pending, ago: 400),
+        ]
+        return GitHubSnapshot(login: "raj", reviewRequested: review, mine: mine, fetchedAt: now)
     }
 
     private static func sampleClaude() -> ClaudeSnapshot {

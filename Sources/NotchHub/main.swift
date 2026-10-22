@@ -1,5 +1,6 @@
 import AppKit
 import ClaudeUsage
+import GitHubKit
 import WindowEngine
 
 // `NotchHub --dump` prints what the window engine sees and exits (handy for debugging).
@@ -97,6 +98,27 @@ if CommandLine.arguments.contains("--claude") {
     exit(0)
 }
 
+// `NotchHub --github` fetches pull requests once and prints counts only.
+if CommandLine.arguments.contains("--github") {
+    let done = DispatchSemaphore(value: 0)
+    Task {
+        guard let credentials = GitHubToken.resolve(allowCommandLine: true) else { print("no token (paste one, or log in with gh)"); done.signal(); return }
+        print("token source:", credentials.source == .commandLine ? "GitHub CLI login" : "pasted token")
+        let began = Date()
+        do {
+            let snapshot = try await GitHubClient().fetch(token: credentials.token)
+            print("fetched in \(Int(Date().timeIntervalSince(began) * 1000)) ms")
+            print("review requested: \(snapshot.reviewRequested.count)   mine: \(snapshot.mine.count)")
+            let states = Dictionary(grouping: snapshot.mine, by: \.checks).mapValues(\.count)
+            print("my checks: passing \(states[.passing] ?? 0), pending \(states[.pending] ?? 0), failing \(states[.failing] ?? 0), none \(states[.none] ?? 0)")
+            print("drafts: \(snapshot.mine.filter(\.isDraft).count)")
+        } catch { print("error:", (error as? GitHubError)?.message ?? "\(error)") }
+        done.signal()
+    }
+    done.wait()
+    exit(0)
+}
+
 // `NotchHub --tabs` reports how many browser windows and tabs the scripting bridge can see.
 if CommandLine.arguments.contains("--tabs") {
     let provider = BrowserTabsProvider()
@@ -133,7 +155,8 @@ if let flag = CommandLine.arguments.firstIndex(of: "--snapshot"), flag + 1 < Com
         let app = args.firstIndex(of: "--app").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
         Preview.render(to: args[flag + 1], demo: args.contains("--demo"), app: app, light: args.contains("--light"),
                        search: args.firstIndex(of: "--search").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil },
-                       claudePanel: args.contains("--claude-panel"), live: args.contains("--live"))
+                       claudePanel: args.contains("--claude-panel"), githubPanel: args.contains("--github-panel"),
+                       githubConnect: args.contains("--github-connect"), live: args.contains("--live"))
     }
     exit(0)
 }
