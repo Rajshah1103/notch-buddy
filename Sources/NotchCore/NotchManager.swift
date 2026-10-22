@@ -3,7 +3,9 @@ import QuartzCore
 import SwiftUI
 
 private final class NotchPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
+    /// Only while searching: hovering must never pull keyboard focus away from what you are typing in.
+    var allowsKey = false
+    override var canBecomeKey: Bool { allowsKey }
     override var canBecomeMain: Bool { false }
 }
 
@@ -15,6 +17,7 @@ private final class NotchController {
     private let outline = CAShapeLayer()     // masks the material and content to the notch shape
     private let edge = CAShapeLayer()        // hairline that defines the shape on any wallpaper
     private let panelSize: CGSize
+    private let screen: NSScreen
     private var collapseWork: DispatchWorkItem?
     private var wasInPrefetchZone = false
     private var intentWork: DispatchWorkItem?
@@ -29,6 +32,7 @@ private final class NotchController {
     private let collapseDelay: TimeInterval = 0.25
 
     init(screen: NSScreen, expandedSize: CGSize, content: (NotchState) -> AnyView) {
+        self.screen = screen
         let geometry = NotchGeometry(screen: screen, expandedSize: expandedSize)
         state = NotchState(geometry: geometry)
 
@@ -89,6 +93,15 @@ private final class NotchController {
         panel.contentView = root
         panel.orderFrontRegardless()
         state.collapseHandler = { [weak self] in self?.collapse() }
+        state.searchHandler = { [weak self] on in self?.setSearching(on) }
+
+        // Clicking anywhere else ends a search.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: panel, queue: .main
+        ) { [weak self] _ in
+            guard let self, self.state.isSearching else { return }
+            self.collapse()
+        }
     }
 
     deinit { panel.orderOut(nil) }
@@ -102,6 +115,7 @@ private final class NotchController {
 
     /// Returns true when the notch just expanded.
     func mouseMoved(to point: NSPoint) -> Bool {
+        if state.isSearching { return false }
         let g = state.geometry
         if state.isExpanded {
             if g.openFrame.contains(point) {
@@ -204,7 +218,32 @@ private final class NotchController {
         CATransaction.commit()
     }
 
-    func collapse() { setExpanded(false) }
+    func collapse() {
+        if state.isSearching { setSearching(false) }
+        setExpanded(false)
+    }
+
+    /// Opens the notch for typing (or closes it). The panel takes keyboard focus but never
+    /// activates the app, so the app you were in stays in front and gets focus back afterwards.
+    func setSearching(_ on: Bool) {
+        guard state.isSearching != on else { return }
+        intentWork?.cancel(); intentWork = nil
+        collapseWork?.cancel(); collapseWork = nil
+        if on {
+            panel.allowsKey = true
+            state.isSearching = true
+            setExpanded(true)
+            panel.makeKeyAndOrderFront(nil)
+            onExpanded?()
+        } else {
+            state.isSearching = false
+            panel.resignKey()
+            panel.allowsKey = false
+        }
+    }
+
+    var isSearching: Bool { state.isSearching }
+    var containsMouse: Bool { screen.frame.contains(NSEvent.mouseLocation) }
 }
 
 /// Owns one notch panel per screen and keeps them in sync with display changes.
@@ -239,6 +278,18 @@ public final class NotchManager {
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
             self?.handleMouseMoved()
             return event
+        }
+    }
+
+    /// Hotkey entry point: opens search on the screen the pointer is on, or closes it.
+    public func toggleSearch() {
+        let target = controllers.first(where: \.containsMouse) ?? controllers.first
+        guard let target else { return }
+        if target.isSearching {
+            target.collapse()
+        } else {
+            controllers.forEach { $0.collapse() }
+            target.setSearching(true)
         }
     }
 
