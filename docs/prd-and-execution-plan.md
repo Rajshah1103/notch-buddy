@@ -16,12 +16,12 @@ Items marked **[my call]** are my defaults, not Raj's decisions. Items marked **
 | M2 WindowEngine (spaces, windows, focus, minimized, full-screen spaces) | Done |
 | M3 Search + hotkey (Control-Option-Space, keyboard control) | Done |
 | M4 Browser tabs | Done, via AppleScript (Chromium browsers) instead of the planned extension; Safari/Firefox not supported |
-| M5 Integration framework + GitHub | Not started |
+| M5 Integration framework + GitHub | Done: `NotchIntegration` protocol and hub (Claude and GitHub use it); GitHub shows review requests and your PRs with check state. Actions run progress is shown only as the PR check state |
 | M6 Jenkins | Not started |
 | M7 Claude usage | Done: live ears while working, sessions panel, tokens today. Plan limits are not stored locally, so not shown |
 | M8 Slack + Gmail (multi-account) | Not started |
 | M9 Design polish | In progress: adaptive system material, light and dark |
-| M10 Commercial (licensing, updates, notarization) | Not started; needs Developer ID |
+| M10 Commercial (licensing, updates, notarization) | Not started; needs Developer ID. Settings window and first-run welcome are done |
 | M11 Calls | Not started |
 
 Findings that changed the design: macOS "Spaces" include one Space per full-screen app, so Desktops and

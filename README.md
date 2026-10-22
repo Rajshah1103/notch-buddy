@@ -19,13 +19,16 @@ Chrome profile names). Requires macOS 14+. The build is ad-hoc signed, so macOS 
   windows (Chrome: its tabs, grouped by window and profile). Click an app to jump to it.
 - **Control-Option-Space**, or the Search button: type to filter windows, tabs and apps. Up/Down choose,
   Return jumps, Esc closes.
-- **Claude chip** (top left of the open notch): Claude Code sessions and tokens used today.
+- **Chips** (top left of the open notch): Claude Code sessions and tokens used today; GitHub review
+  requests and the check state of your pull requests (connect with a token, or it uses your `gh` login).
+- **Settings** (menu bar icon): hover delay, search shortcut, integrations, permissions.
 
 ## Layout
 
 - `Sources/WindowEngine`: Spaces, windows, browser tabs, grouping, search. The only place private macOS
   APIs live.
 - `Sources/ClaudeUsage`: live Claude Code activity and token counts from its local transcripts.
+- `Sources/GitHubKit`: pull requests and check state from GitHub's GraphQL API, token handling.
 - `Sources/NotchCore`: notch panel, outline animation, hover and keyboard focus. Knows nothing about windows.
 - `Sources/NotchHub`: the app, wires the modules together.
 
@@ -34,9 +37,11 @@ Chrome profile names). Requires macOS 14+. The build is ad-hoc signed, so macOS 
     NotchHub --dump                          what the window engine sees
     NotchHub --tabs                          browser windows and tabs the scripting bridge can read
     NotchHub --claude                        Claude Code activity (counts only)
+    NotchHub --github                        pull request counts from GitHub (counts only)
     NotchHub --focus "App"                   jump to an app and report what came to the front
-    NotchHub --snapshot out.png --demo [--app "Google Chrome"] [--light] [--search dep] [--claude-panel] [--live]
+    NotchHub --snapshot out.png --demo [--app "Google Chrome"] [--light] [--search dep] [--claude-panel] [--github-panel] [--github-connect] [--live]
                                              render the UI offscreen with invented data
+    NotchHub --window settings|welcome out.png [--light]
     NOTCHHUB_PERF=1 NotchHub                 log main-thread stalls and slow background reads
 
 Tests use Swift Testing and need full Xcode to run (`swift test`).
