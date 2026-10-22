@@ -11,8 +11,11 @@ let package = Package(
         .target(name: "NotchCore"),
         // Live Claude Code activity and token counts, read from its local session transcripts.
         .target(name: "ClaudeUsage"),
-        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore", "ClaudeUsage"]),
+        // Pull requests that need you and the state of your own, from GitHub's GraphQL API.
+        .target(name: "GitHubKit"),
+        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore", "ClaudeUsage", "GitHubKit"]),
         .testTarget(name: "WindowEngineTests", dependencies: ["WindowEngine"]),
         .testTarget(name: "ClaudeUsageTests", dependencies: ["ClaudeUsage"]),
+        .testTarget(name: "GitHubKitTests", dependencies: ["GitHubKit"]),
     ]
 )

@@ -3,7 +3,8 @@ import Foundation
 
 /// Watches Claude Code's session transcripts (`~/.claude/projects/*/*.jsonl`) and reports live
 /// activity and token counts. Event driven: it costs nothing while nothing is being written.
-public final class ClaudeUsageMonitor {
+// All mutable state is touched only on `queue`, which is what makes sharing the object safe.
+public final class ClaudeUsageMonitor: @unchecked Sendable {
     public var onChange: ((ClaudeSnapshot) -> Void)?
 
     private let root: URL
