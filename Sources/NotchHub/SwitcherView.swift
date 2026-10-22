@@ -13,6 +13,11 @@ struct SwitcherView: View {
     /// Only the preview pane observes this, so moving across rows does not re-render the list.
     @StateObject private var hover = HoverStore()
 
+    @State private var searching = false
+    @State private var query = ""
+    @State private var selection = 0
+    @FocusState private var fieldFocused: Bool
+
     private var selected: AppGroup? {
         if let selectedID, let group = model.groups.first(where: { $0.id == selectedID }) { return group }
         return model.groups.first
@@ -21,12 +26,18 @@ struct SwitcherView: View {
     var body: some View {
         VStack(spacing: 0) {
             ears(notch.geometry)
-            AppDock(groups: model.groups, icons: model.icons, selectedID: selected?.id,
-                    onSelect: { selectedID = $0 }, onOpen: open)
-                .padding(.top, 6)
-            if let group = selected {
-                Detail(model: model, group: group, hover: hover, onOpen: open)
-                    .padding(.top, 10)
+            if searching {
+                SearchPanel(model: model, query: $query, selection: $selection, focus: $fieldFocused,
+                            onOpen: open, onClose: { notch.collapse() })
+                    .padding(.top, 8)
+            } else {
+                AppDock(groups: model.groups, icons: model.icons, selectedID: selected?.id,
+                        onSelect: { selectedID = $0 }, onOpen: open)
+                    .padding(.top, 6)
+                if let group = selected {
+                    Detail(model: model, group: group, hover: hover, onOpen: open)
+                        .padding(.top, 10)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -35,6 +46,17 @@ struct SwitcherView: View {
         .onReceive(notch.$isExpanded) { expanded in
             // Start each visit from the default: the app you are in, nothing hovered.
             if !expanded { selectedID = nil; hover.entry = nil }
+        }
+        .onReceive(notch.$isSearching) { isSearching in
+            searching = isSearching
+            if isSearching {
+                query = PreviewSeed.query ?? ""
+                selection = 0
+                // The panel becomes key a moment after it opens; focus the field once it has.
+                DispatchQueue.main.async { fieldFocused = true }
+            } else {
+                fieldFocused = false
+            }
         }
     }
 
@@ -63,11 +85,14 @@ struct SwitcherView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, 16)
                 Color.clear.frame(width: g.collapsedSize.width)
-                Text(summary)
-                    .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Theme.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 16)
+                HStack(spacing: 10) {
+                    SearchButton { notch.setSearching(true) }
+                    Text(summary)
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 16)
             }
             .frame(height: g.collapsedSize.height)
         } else {
@@ -82,6 +107,11 @@ struct SwitcherView: View {
         }.count
         return "\(model.groups.count) apps · \(open) open"
     }
+}
+
+/// Lets the snapshot tool start the search view with text already typed.
+enum PreviewSeed {
+    nonisolated(unsafe) static var query: String?
 }
 
 enum Layout {
@@ -275,6 +305,7 @@ private struct SectionHeader: View {
 private struct EntryRow: View {
     let entry: Entry
     let icon: NSImage?
+    var isSelected = false
     let onHover: () -> Void
     let onOpen: () -> Void
 
@@ -306,7 +337,7 @@ private struct EntryRow: View {
             .frame(height: 34)
             .background(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(isHovered ? Theme.fillHover : Color.clear)
+                    .fill(isHovered || isSelected ? Theme.fillHover : Color.clear)
             )
             .contentShape(Rectangle())
         }
@@ -333,7 +364,7 @@ private struct Leading: View {
             }
             .frame(width: size, height: size)
         } else {
-            Monogram(host: entry.subtitle, size: size)
+            Monogram(host: entry.host, size: size)
         }
     }
 }
@@ -418,6 +449,129 @@ private struct PreviewPane: View {
     private var location: String {
         [entry.place.label, entry.detail, entry.isActive && !entry.url.isEmpty ? "Showing now" : ""]
             .filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+}
+
+// MARK: - Search
+
+private struct SearchButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: "magnifyingglass").font(.system(size: 10, weight: .semibold))
+                Text("Search").font(.system(size: 11, weight: .medium))
+                Text("⌃⌥Space").font(.system(size: 10)).foregroundStyle(Theme.textSecondary.opacity(0.8))
+            }
+            .foregroundStyle(Theme.textSecondary)
+            .padding(.horizontal, 9)
+            .frame(height: 20)
+            .background(Capsule().fill(hovering ? Theme.fillHover : Theme.fillQuiet))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressStyle())
+        .onHover { hovering = $0 }
+        .accessibilityLabel("Search windows and tabs")
+    }
+}
+
+/// Type to find anything open. ↑ ↓ choose, Return jumps, Esc closes.
+private struct SearchPanel: View {
+    @ObservedObject var model: WindowsModel
+    @Binding var query: String
+    @Binding var selection: Int
+    var focus: FocusState<Bool>.Binding
+    let onOpen: (Entry) -> Void
+    let onClose: () -> Void
+
+    private let visibleRows = 8
+
+    var body: some View {
+        let all = Search.results(for: query, in: model.groups)
+        let shown = Array(all.prefix(visibleRows))
+        let current = shown.indices.contains(selection) ? shown[selection] : shown.first
+
+        VStack(alignment: .leading, spacing: 12) {
+            field(count: shown.count)
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 2) {
+                    if shown.isEmpty {
+                        empty
+                    } else {
+                        ForEach(Array(shown.enumerated()), id: \.element.id) { index, result in
+                            EntryRow(entry: result.entry.withSubtitle(subtitle(for: result)),
+                                     icon: model.icons[result.appPID], isSelected: index == selection,
+                                     onHover: { selection = index }, onOpen: { onOpen(result.entry) })
+                        }
+                        if all.count > shown.count {
+                            Text("\(all.count - shown.count) more · keep typing to narrow")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Theme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .frame(height: 28)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .frame(width: 590)
+
+                if let current {
+                    PreviewPane(entry: current.entry, icon: model.icons[current.appPID],
+                                thumbnail: current.entry.thumbnailWindowID.flatMap { model.thumbnails[$0] })
+                }
+            }
+        }
+        .onChange(of: query) { selection = 0 }
+        .onKeyPress(.downArrow) { selection = min(selection + 1, max(shown.count - 1, 0)); return .handled }
+        .onKeyPress(.upArrow) { selection = max(selection - 1, 0); return .handled }
+        .onKeyPress(.return) {
+            if let current { onOpen(current.entry) }
+            return .handled
+        }
+        .onKeyPress(.escape) { onClose(); return .handled }
+    }
+
+    private func field(count: Int) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
+            TextField("Search windows, tabs and apps", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 18))
+                .focused(focus)
+                .accessibilityLabel("Search")
+            Text(query.isEmpty ? "Recent" : "\(count) result\(count == 1 ? "" : "s")")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
+            Text("esc")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
+                .padding(.horizontal, 6).frame(height: 18)
+                .background(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.textSecondary.opacity(0.4), lineWidth: 0.5))
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 46)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.fillQuiet))
+    }
+
+    private var empty: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "questionmark.circle").font(.system(size: 22)).foregroundStyle(Theme.textSecondary)
+            Text("Nothing matches “\(query)”").font(.system(size: 13, weight: .medium))
+            Text("Try part of a title, a site, or an app name")
+                .font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 40)
+    }
+
+    /// "Google Chrome · github.com": results from different apps need to say where they live.
+    private func subtitle(for result: SearchResult) -> String {
+        [result.appName, result.entry.subtitle].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
 

@@ -106,7 +106,8 @@ if let flag = CommandLine.arguments.firstIndex(of: "--snapshot"), flag + 1 < Com
     MainActor.assumeIsolated {
         let args = CommandLine.arguments
         let app = args.firstIndex(of: "--app").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
-        Preview.render(to: args[flag + 1], demo: args.contains("--demo"), app: app, light: args.contains("--light"))
+        Preview.render(to: args[flag + 1], demo: args.contains("--demo"), app: app, light: args.contains("--light"),
+                       search: args.firstIndex(of: "--search").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil })
     }
     exit(0)
 }

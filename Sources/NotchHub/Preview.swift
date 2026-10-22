@@ -7,7 +7,7 @@ import WindowEngine
 /// can be checked without screen-recording permission. `--demo` fills in sample window titles.
 @MainActor
 enum Preview {
-    static func render(to path: String, demo: Bool, app: String?, light: Bool) {
+    static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
@@ -18,6 +18,7 @@ enum Preview {
         let state = NotchState(geometry: NotchGeometry(screen: screen, expandedSize: size))
 
         state.isExpanded = true
+        if let search { PreviewSeed.query = search; state.isSearching = true }
 
         let model = WindowsModel()
         model.loadForPreview(snapshot, browsers: demo ? sampleBrowsers(snapshot) : [:], frontApp: app)

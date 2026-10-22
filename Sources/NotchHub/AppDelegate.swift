@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import ServiceManagement
 import SwiftUI
 import NotchCore
@@ -8,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windows = WindowsModel()
     private var notch: NotchManager?
     private var statusItem: NSStatusItem?
+    private var searchHotKey: HotKey?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -22,6 +24,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PerfProbe.startStallWatchdog()
         model.startTrackingRecents()
         notch?.start()
+
+        // Control-Option-Space opens search. Chosen because Spotlight, Raycast and Alfred
+        // all use Command or Option with Space.
+        searchHotKey = HotKey(keyCode: kVK_Space, modifiers: controlKey | optionKey) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.windows.refresh(previews: true)
+                self?.notch?.toggleSearch()
+            }
+        }
         model.refresh(previews: false)
         setUpStatusItem()
     }
@@ -47,6 +58,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func openSearch() {
+        windows.refresh(previews: true)
+        notch?.toggleSearch()
+    }
+
     @objc private func grantAccessibility() { Permissions.requestAccessibility() }
     @objc private func grantScreenRecording() { Permissions.requestScreenRecording() }
     @objc private func quit() { NSApp.terminate(nil) }
@@ -55,6 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+
+        let search = menu.addItem(withTitle: "Search…", action: #selector(openSearch), keyEquivalent: "")
+        search.toolTip = "Control-Option-Space"
+        menu.addItem(.separator())
 
         let accessibility = menu.addItem(withTitle: "Accessibility (jump to windows)",
                                          action: #selector(grantAccessibility), keyEquivalent: "")
