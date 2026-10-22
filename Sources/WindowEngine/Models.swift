@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 public struct WindowRecord: Identifiable, Hashable {
@@ -6,13 +7,19 @@ public struct WindowRecord: Identifiable, Hashable {
     public let appName: String
     public let title: String
     public let spaceIDs: [Int]
+    public let bounds: CGRect
+    /// Position in the system's front-to-back window list (smaller is closer to the front).
+    public let order: Int
 
-    public init(id: UInt32, pid: Int32, appName: String, title: String, spaceIDs: [Int]) {
+    public init(id: UInt32, pid: Int32, appName: String, title: String, spaceIDs: [Int],
+                bounds: CGRect = .zero, order: Int = 0) {
         self.id = id
         self.pid = pid
         self.appName = appName
         self.title = title
         self.spaceIDs = spaceIDs
+        self.bounds = bounds
+        self.order = order
     }
 }
 

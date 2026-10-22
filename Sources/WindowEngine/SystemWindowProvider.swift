@@ -15,8 +15,9 @@ public final class SystemWindowProvider {
         let regular = apps.filter { $0.activationPolicy == .regular && $0.processIdentifier != ownPID }
         let regularPIDs = Set(regular.map(\.processIdentifier))
 
-        let records = windowRecords(connection: cid, regularPIDs: regularPIDs)
-        let minimizedIDs = minimizedWindowIDs(pids: Array(regularPIDs))
+        let ax = accessibilityInfo(pids: Array(regularPIDs))
+        let records = windowRecords(connection: cid, regularPIDs: regularPIDs, axTitles: ax.titles)
+        let minimizedIDs = ax.minimized
 
         let regularApps = regular.map {
             AppRecord(pid: $0.processIdentifier, name: $0.localizedName ?? "App", bundleURL: $0.bundleURL)
@@ -45,11 +46,11 @@ public final class SystemWindowProvider {
         return result
     }
 
-    private func windowRecords(connection cid: Int32, regularPIDs: Set<Int32>) -> [WindowRecord] {
+    private func windowRecords(connection cid: Int32, regularPIDs: Set<Int32>, axTitles: [UInt32: String]) -> [WindowRecord] {
         let options: CGWindowListOption = [.optionAll, .excludeDesktopElements]
         let infos = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
 
-        return infos.compactMap { info in
+        return infos.enumerated().compactMap { order, info in
             guard let id = info[kCGWindowNumber as String] as? UInt32,
                   let pid = info[kCGWindowOwnerPID as String] as? Int32, pid != ownPID,
                   info[kCGWindowLayer as String] as? Int == 0,
@@ -59,24 +60,31 @@ public final class SystemWindowProvider {
                   bounds.width > 80, bounds.height > 80
             else { return nil }
 
-            let title = info[kCGWindowName as String] as? String ?? ""
+            // Titles from the window server need Screen Recording; Accessibility is the fallback.
+            var title = info[kCGWindowName as String] as? String ?? ""
+            if title.isEmpty { title = axTitles[id] ?? "" }
             // Skip helper windows of accessory apps unless they have a real title.
             guard regularPIDs.contains(pid) || !title.isEmpty else { return nil }
 
             let spaceIDs = CGSCopySpacesForWindows(cid, 7, [id] as CFArray) as? [Int] ?? []
-            return WindowRecord(id: id, pid: pid, appName: appName, title: title, spaceIDs: spaceIDs)
+            return WindowRecord(id: id, pid: pid, appName: appName, title: title, spaceIDs: spaceIDs, bounds: bounds, order: order)
         }
     }
 
-    private func minimizedWindowIDs(pids: [Int32]) -> Set<UInt32> {
-        guard AXIsProcessTrusted() else { return [] }
-        var ids = Set<UInt32>()
+    /// One Accessibility pass: which windows are minimized, and every readable window title.
+    /// Windows on other Spaces are invisible to Accessibility, so those titles come from elsewhere.
+    private func accessibilityInfo(pids: [Int32]) -> (minimized: Set<UInt32>, titles: [UInt32: String]) {
+        guard AXIsProcessTrusted() else { return ([], [:]) }
+        var minimized = Set<UInt32>()
+        var titles: [UInt32: String] = [:]
         for pid in pids {
-            for window in axWindows(pid: pid) where axBool(window, kAXMinimizedAttribute) == true {
-                if let id = windowID(of: window) { ids.insert(id) }
+            for window in axWindows(pid: pid) {
+                guard let id = windowID(of: window) else { continue }
+                if axBool(window, kAXMinimizedAttribute) == true { minimized.insert(id) }
+                if let title = axValue(window, kAXTitleAttribute) as? String, !title.isEmpty { titles[id] = title }
             }
         }
-        return ids
+        return (minimized, titles)
     }
 
     // MARK: - Acting
@@ -92,19 +100,24 @@ public final class SystemWindowProvider {
         }
 
         if AXIsProcessTrusted() {
-            // Windows on another Space only become reachable once that Space is current,
-            // so poll briefly instead of waiting a fixed time.
-            let attempts = switchedSpace ? 20 : 1
+            // Windows on another Space only become reachable once that Space is current, and some
+            // apps (Chrome) are slow to report them. Poll briefly, then fall back to activating the app.
+            let attempts = switchedSpace ? 6 : 1
             for attempt in 0..<attempts {
                 if let element = axWindows(pid: window.pid).first(where: { windowID(of: $0) == window.id }) {
                     AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
                     AXUIElementPerformAction(element, kAXRaiseAction as CFString)
                     break
                 }
-                if attempt < attempts - 1 { try? await Task.sleep(nanoseconds: 15_000_000) }
+                if attempt < attempts - 1 { try? await Task.sleep(nanoseconds: 25_000_000) }
             }
         }
         app?.activate()
+    }
+
+    /// Switches to a Desktop directly, without the swipe animation.
+    public func switchTo(_ space: SpaceInfo) {
+        CGSManagedDisplaySetCurrentSpace(CGSMainConnectionID(), space.displayID as CFString, space.id)
     }
 
     /// Opens (or reopens) an app that has no window, like clicking its Dock icon.
