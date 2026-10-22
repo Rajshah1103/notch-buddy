@@ -13,7 +13,7 @@ public actor ThumbnailService {
     public init() {}
 
     /// Captures windows in `ids` that have no recent capture. Returns only the new images.
-    public func capture(_ ids: [UInt32], maxWidth: Int = 360) async -> [UInt32: CGImage] {
+    public func capture(_ ids: [UInt32], maxWidth: Int = 640) async -> [UInt32: CGImage] {
         guard CGPreflightScreenCaptureAccess() else { return [:] }
         let stale = ids.filter { Date().timeIntervalSince(lastCapture[$0] ?? .distantPast) > freshFor }
         guard !stale.isEmpty, let windows = await windowIndex() else { return [:] }
@@ -32,6 +32,20 @@ public actor ThumbnailService {
             }
         }
         return captured
+    }
+
+    /// One window at high resolution, for the preview pane, which is much bigger than a tile. Only works
+    /// for a window on a Space that is on screen right now.
+    public func captureLarge(_ id: UInt32, maxWidth: Int = 1400) async -> CGImage? {
+        guard CGPreflightScreenCaptureAccess(), let windows = await windowIndex(), let window = windows[id],
+              window.frame.width > 0, window.frame.height > 0
+        else { return nil }
+        let config = SCStreamConfiguration()
+        config.width = maxWidth
+        config.height = max(1, Int(window.frame.height * CGFloat(maxWidth) / window.frame.width))
+        config.showsCursor = false
+        return try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window),
+                                                           configuration: config)
     }
 
     /// Listing shareable windows is the expensive part of a capture, so reuse it briefly.
