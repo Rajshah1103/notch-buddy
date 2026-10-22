@@ -8,7 +8,7 @@ public final class NotchState: ObservableObject {
 
     public func collapse() { collapseHandler() }
 
-    init(geometry: NotchGeometry) {
+    public init(geometry: NotchGeometry) {
         self.geometry = geometry
     }
 }
@@ -54,7 +54,6 @@ struct NotchShell<Content: View>: View {
 
             if state.isExpanded {
                 content
-                    .padding(.top, g.collapsedSize.height)
                     .frame(width: g.expandedSize.width, height: g.expandedSize.height)
                     .transition(reduceMotion
                         ? .opacity
