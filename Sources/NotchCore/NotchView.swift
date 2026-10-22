@@ -3,6 +3,10 @@ import SwiftUI
 public final class NotchState: ObservableObject {
     @Published public var isExpanded = false
     public let geometry: NotchGeometry
+    /// Set by the controller; content calls `collapse()` after the user picks something.
+    var collapseHandler: () -> Void = {}
+
+    public func collapse() { collapseHandler() }
 
     init(geometry: NotchGeometry) {
         self.geometry = geometry
@@ -37,6 +41,7 @@ struct NotchShape: Shape {
 struct NotchShell<Content: View>: View {
     @ObservedObject var state: NotchState
     let content: Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let g = state.geometry
@@ -51,10 +56,15 @@ struct NotchShell<Content: View>: View {
                 content
                     .padding(.top, g.collapsedSize.height)
                     .frame(width: g.expandedSize.width, height: g.expandedSize.height)
-                    .transition(.opacity)
+                    .transition(reduceMotion
+                        ? .opacity
+                        : .opacity.combined(with: .scale(scale: 0.94, anchor: .top)))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: state.isExpanded)
+        .animation(reduceMotion
+                   ? .easeInOut(duration: 0.15)
+                   : .spring(response: 0.32, dampingFraction: 0.82),
+                   value: state.isExpanded)
     }
 }

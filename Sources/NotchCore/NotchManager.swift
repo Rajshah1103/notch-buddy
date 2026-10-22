@@ -11,6 +11,7 @@ private final class NotchController {
     let state: NotchState
     private let panel: NotchPanel
     private var collapseWork: DispatchWorkItem?
+    private var wasInPrefetchZone = false
 
     /// How long the pointer may stray outside the open notch before it collapses.
     private let collapseDelay: TimeInterval = 0.25
@@ -33,9 +34,17 @@ private final class NotchController {
         hosting.frame = NSRect(origin: .zero, size: geometry.panelFrame.size)
         panel.contentView = hosting
         panel.orderFrontRegardless()
+        state.collapseHandler = { [weak self] in self?.collapse() }
     }
 
     deinit { panel.orderOut(nil) }
+
+    /// True once per entry into the zone around the notch.
+    func enteredPrefetchZone(_ point: NSPoint) -> Bool {
+        let inside = state.geometry.prefetchFrame.contains(point)
+        defer { wasInPrefetchZone = inside }
+        return inside && !wasInPrefetchZone
+    }
 
     /// Returns true when the notch just expanded.
     func mouseMoved(to point: NSPoint) -> Bool {
@@ -74,14 +83,17 @@ public final class NotchManager {
     private let expandedSize: CGSize
     private let content: (NotchState) -> AnyView
     private let onExpand: () -> Void
+    private let onPrefetch: () -> Void
     private var controllers: [NotchController] = []
     private var globalMonitor: Any?
     private var localMonitor: Any?
 
     public init(expandedSize: CGSize,
+                onPrefetch: @escaping () -> Void,
                 onExpand: @escaping () -> Void,
                 content: @escaping (NotchState) -> AnyView) {
         self.expandedSize = expandedSize
+        self.onPrefetch = onPrefetch
         self.onExpand = onExpand
         self.content = content
     }
@@ -116,7 +128,12 @@ public final class NotchManager {
     private func handleMouseMoved() {
         let point = NSEvent.mouseLocation
         var expanded = false
-        for controller in controllers where controller.mouseMoved(to: point) { expanded = true }
+        var prefetch = false
+        for controller in controllers {
+            if controller.enteredPrefetchZone(point) { prefetch = true }
+            if controller.mouseMoved(to: point) { expanded = true }
+        }
+        if prefetch { onPrefetch() }
         if expanded { onExpand() }
     }
 }

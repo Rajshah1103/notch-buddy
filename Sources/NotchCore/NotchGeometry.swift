@@ -33,6 +33,12 @@ public struct NotchGeometry {
                height: collapsedSize.height + 4)
     }
 
+    /// Wider zone around the notch; entering it is the cue to load data before the notch opens.
+    public var prefetchFrame: NSRect {
+        triggerFrame.insetBy(dx: -120, dy: -60).intersection(
+            NSRect(x: panelFrame.minX, y: panelFrame.maxY - 200, width: panelFrame.width, height: 200))
+    }
+
     /// Area that keeps the notch open once expanded.
     public var openFrame: NSRect {
         NSRect(x: panelFrame.midX - expandedSize.width / 2,
