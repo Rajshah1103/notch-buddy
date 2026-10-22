@@ -105,12 +105,13 @@ private final class NotchController {
         panel.orderFrontRegardless()
         state.collapseHandler = { [weak self] in self?.collapse() }
         state.searchHandler = { [weak self] on in self?.setSearching(on) }
+        state.typingHandler = { [weak self] on in self?.setTyping(on) }
 
         // Clicking anywhere else ends a search.
         NotificationCenter.default.addObserver(
             forName: NSWindow.didResignKeyNotification, object: panel, queue: .main
         ) { [weak self] _ in
-            guard let self, self.state.isSearching else { return }
+            guard let self, self.state.isSearching || self.state.isTyping else { return }
             self.collapse()
         }
     }
@@ -126,7 +127,7 @@ private final class NotchController {
 
     /// Returns true when the notch just expanded.
     func mouseMoved(to point: NSPoint) -> Bool {
-        if state.isSearching { return false }
+        if state.isSearching || state.isTyping { return false }
         let g = state.geometry
         if state.isExpanded {
             if g.openFrame.contains(point) {
@@ -265,6 +266,7 @@ private final class NotchController {
 
     func collapse() {
         if state.isSearching { setSearching(false) }
+        if state.isTyping { setTyping(false) }
         setExpanded(false)
     }
 
@@ -282,6 +284,22 @@ private final class NotchController {
             onExpanded?()
         } else {
             state.isSearching = false
+            panel.resignKey()
+            panel.allowsKey = false
+        }
+    }
+
+    /// For a panel with a text field: take keyboard focus and keep the notch open, without a search UI.
+    func setTyping(_ on: Bool) {
+        guard state.isTyping != on, !state.isSearching else { return }
+        intentWork?.cancel(); intentWork = nil
+        collapseWork?.cancel(); collapseWork = nil
+        if on {
+            panel.allowsKey = true
+            state.isTyping = true
+            panel.makeKeyAndOrderFront(nil)
+        } else {
+            state.isTyping = false
             panel.resignKey()
             panel.allowsKey = false
         }
