@@ -14,6 +14,10 @@ public final class NotchState: ObservableObject {
     /// Set by the controller; content calls these after the user picks something.
     var collapseHandler: () -> Void = {}
     var searchHandler: (Bool) -> Void = { _ in }
+    /// Receives the pointer position inside the open notch (points, origin at its top-left), or nil when it
+    /// is outside. SwiftUI's own hover tracking does not fire in a panel that is never the active window, so
+    /// the content does its own hit testing from this.
+    public var pointerHandler: ((CGPoint?) -> Void)?
     var typingHandler: (Bool) -> Void = { _ in }
 
     public func collapse() { collapseHandler() }

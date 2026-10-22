@@ -15,7 +15,10 @@ private final class NotchController {
     private let panel: NotchPanel
     private let contentHost: NSView
     private let liveHost: NSView
+    private let material: NSVisualEffectView
+    private let backing: NSView               // plain black, used while collapsed (no live blur to composite)
     private var liveExtra: CGFloat = 0
+    private var restingWork: DispatchWorkItem?
     private let outline = CAShapeLayer()     // masks the material and content to the notch shape
     private let edge = CAShapeLayer()        // hairline that defines the shape on any wallpaper
     private let panelSize: CGSize
@@ -61,11 +64,19 @@ private final class NotchController {
         // The material: the same translucent glass macOS uses for popovers. It follows light/dark,
         // the wallpaper behind it, and the Reduce Transparency setting. `.active` keeps it from
         // going flat, because this panel never becomes the active window.
-        let material = NSVisualEffectView(frame: bounds)
+        material = NSVisualEffectView(frame: bounds)
         material.material = .popover
         material.blendingMode = .behindWindow
         material.state = .active
         material.autoresizingMask = [.width, .height]
+        material.isHidden = true          // glass only exists while the notch is open
+
+        // While collapsed the notch is a plain black pill, like the hardware it extends. A live blur
+        // behind a window costs the whole system compositing work every frame, even when nothing shows.
+        backing = NSView(frame: bounds)
+        backing.wantsLayer = true
+        backing.layer?.backgroundColor = NSColor.black.cgColor
+        backing.autoresizingMask = [.width, .height]
 
         let body = content(state)
             .frame(width: geometry.expandedSize.width, height: geometry.expandedSize.height, alignment: .top)
@@ -78,7 +89,9 @@ private final class NotchController {
         contentHost.isHidden = true
 
         // Live activity: shown only while collapsed, in the ears that grow out of the notch.
+        // It sits on black, so it is always drawn for a dark appearance whatever the system uses.
         liveHost = NSHostingView(rootView: live(state)
+            .environment(\.colorScheme, .dark)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top))
         liveHost.frame = bounds
         liveHost.autoresizingMask = [.width, .height]
@@ -88,6 +101,7 @@ private final class NotchController {
         let clip = NSView(frame: bounds)
         clip.wantsLayer = true
         clip.autoresizingMask = [.width, .height]
+        clip.addSubview(backing)
         clip.addSubview(material)
         clip.addSubview(liveHost)
         clip.addSubview(contentHost)
@@ -99,6 +113,12 @@ private final class NotchController {
         clip.layer?.mask = outline
         root.addSubview(clip)
 
+        // The window grows and shrinks (and hides) around fixed-size content, which stays pinned to the
+        // top centre, so resizing the window never makes SwiftUI lay anything out again.
+        root.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
+        let wrapper = NSView(frame: bounds)
+        wrapper.addSubview(root)
+
         edge.frame = bounds
         edge.fillColor = nil
         edge.lineWidth = 0.5
@@ -106,7 +126,8 @@ private final class NotchController {
         edge.opacity = 0
         root.layer?.addSublayer(edge)
 
-        panel.contentView = root
+        panel.contentView = wrapper
+        panel.setFrame(NSRect(x: geometry.panelFrame.midX - 1, y: geometry.panelFrame.maxY - 2, width: 2, height: 2), display: false)
         panel.orderFrontRegardless()
         state.collapseHandler = { [weak self] in self?.collapse() }
         state.searchHandler = { [weak self] on in self?.setSearching(on) }
@@ -137,6 +158,12 @@ private final class NotchController {
             hypot(point.x - $0.point.x, point.y - $0.point.y) / CGFloat(max(now - $0.time, 0.001))
         } ?? 0
         lastSample = (point, now)
+
+        if state.isExpanded {
+            let frame = state.geometry.panelFrame
+            let inside = state.geometry.openFrame.contains(point)
+            state.pointerHandler?(inside ? CGPoint(x: point.x - frame.minX, y: frame.maxY - point.y) : nil)
+        }
 
         if state.isSearching || state.isTyping { return false }
         let g = state.geometry
@@ -188,6 +215,7 @@ private final class NotchController {
         guard state.isExpanded != expanded else { return }
         panel.ignoresMouseEvents = !expanded
         state.isExpanded = expanded
+        if !expanded { state.pointerHandler?(nil) }
         animateContent(expanded: expanded)
     }
 
@@ -197,6 +225,9 @@ private final class NotchController {
         guard let layer = contentHost.layer else { return }
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let g = state.geometry
+
+        if expanded { showForExpansion() } else { scheduleResting(after: 0.26) }
+        fadeBacking(visible: !expanded, quickly: expanded)
 
         // Outline (and the hairline that follows it).
         let target = NotchPath.make(panelSize: panelSize, collapsed: g.collapsedSize, expanded: g.expandedSize,
@@ -244,6 +275,47 @@ private final class NotchController {
         CATransaction.commit()
     }
 
+    // MARK: - Window at rest
+
+    /// The small window that covers the collapsed pill and its live ears.
+    private func liveFrame() -> NSRect {
+        let g = state.geometry
+        let width = g.collapsedSize.width + 2 * liveExtra + 8
+        let height = g.collapsedSize.height + 6
+        return NSRect(x: g.panelFrame.midX - width / 2, y: g.panelFrame.maxY - height, width: width, height: height)
+    }
+
+    private func sliverFrame() -> NSRect {
+        let g = state.geometry
+        return NSRect(x: g.panelFrame.midX - 1, y: g.panelFrame.maxY - 2, width: 2, height: 2)
+    }
+
+    /// Open (or about to open): full size, in front, glass ready.
+    private func showForExpansion() {
+        restingWork?.cancel(); restingWork = nil
+        let began = CACurrentMediaTime()
+        panel.setFrame(state.geometry.panelFrame, display: false)
+        material.isHidden = false
+        panel.orderFrontRegardless()
+        trace?("window shown (took \(Int((CACurrentMediaTime() - began) * 1000)) ms on the main thread)")
+    }
+
+    /// After the notch has closed or the live activity changed: drop to the smallest window that shows
+    /// what is left, or no window at all. An invisible panel costs nothing; a large one with a blur does.
+    private func scheduleResting(after delay: TimeInterval) {
+        restingWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.state.isExpanded else { return }
+            self.material.isHidden = true
+            // Never ordered out: bringing a hidden window back on screen takes the system ~170 ms, which
+            // is felt as the notch opening late. A 2-point window costs nothing and resizes instantly.
+            self.panel.setFrame(self.liveExtra > 0 ? self.liveFrame() : self.sliverFrame(), display: false)
+            self.panel.orderFrontRegardless()
+        }
+        restingWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
     private func animateOutline(to target: CGPath, duration: CFTimeInterval, timing: CAMediaTimingFunction) {
         let fromPath = outline.presentation()?.path ?? outline.path
         for shape in [outline, edge] {
@@ -256,6 +328,21 @@ private final class NotchController {
             grow.timingFunction = timing
             shape.add(grow, forKey: "path")
         }
+    }
+
+    /// The black pill gives way to glass as the notch opens, and returns as it closes.
+    private func fadeBacking(visible: Bool, quickly: Bool) {
+        guard let layer = backing.layer else { return }
+        let from = layer.presentation()?.opacity ?? layer.opacity
+        let to: Float = visible ? 1 : 0
+        layer.removeAnimation(forKey: "fade")
+        layer.opacity = to
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = from
+        fade.toValue = to
+        fade.duration = quickly ? 0.16 : 0.12
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(fade, forKey: "fade")
     }
 
     private func fadeLive(visible: Bool, quickly: Bool) {
@@ -278,6 +365,13 @@ private final class NotchController {
         liveExtra = extra
         state.liveExtra = extra
         guard !state.isExpanded else { return }   // takes effect when the notch next collapses
+        if extra > 0 {
+            restingWork?.cancel(); restingWork = nil
+            panel.setFrame(liveFrame(), display: false)
+            panel.orderFrontRegardless()
+        } else {
+            scheduleResting(after: 0.45)          // let the pill finish shrinking, then hide
+        }
         let g = state.geometry
         let target = NotchPath.make(panelSize: panelSize, collapsed: g.collapsedSize, expanded: g.expandedSize,
                                     progress: 0, liveExtra: extra)
