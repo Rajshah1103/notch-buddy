@@ -60,6 +60,9 @@ signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Devel
   connection. Running builds show a progress bar; a running build also shows as a ring beside the
   collapsed notch when Claude is idle. On a VPN, connect it yourself: Notch Hub shows "offline" and
   recovers on its own.
+- **Calendar**: turn on "Show next meeting" in Settings, then allow Calendar access from the panel. It reads
+  the events already in the Calendar app (Google, iCloud, Exchange) and offers Join for Meet, Zoom, Teams and
+  Webex links. Five minutes before a meeting the collapsed notch shows a calendar glyph and a countdown.
 - **Settings** (menu bar icon): hover delay, search shortcut, integrations, permissions.
 
 ## Layout
@@ -69,6 +72,7 @@ signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Devel
 - `Sources/ClaudeUsage`: live Claude Code activity and token counts from its local transcripts.
 - `Sources/GitHubKit`: pull requests and check state from GitHub's GraphQL API, token handling.
 - `Sources/JenkinsKit`: job state and live progress from Jenkins' JSON API, offline backoff.
+- `Sources/CalendarKit`: meetings, join-link detection, next-meeting logic and the EventKit monitor.
 - `Sources/NotchCore`: notch panel, outline animation, hover and keyboard focus. Knows nothing about windows.
 - `Sources/NotchHub`: the app, wires the modules together.
 
@@ -79,7 +83,7 @@ signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Devel
     NotchHub --claude                        Claude Code activity (counts only)
     NotchHub --github                        pull request counts from GitHub (counts only)
     NotchHub --focus "App"                   jump to an app and report what came to the front
-    NotchHub --snapshot out.png --demo [--app "Google Chrome"] [--light] [--search dep] [--claude-panel] [--github-panel] [--github-connect] [--live]
+    NotchHub --snapshot out.png --demo [--app "Google Chrome"] [--light] [--search dep] [--claude-panel] [--github-panel] [--github-connect] [--calendar-panel] [--live] [--live-meeting]
                                              render the UI offscreen with invented data
     NotchHub --window settings|welcome out.png [--light]
     NotchHub --diagnostics                   the text "Copy diagnostics" in Settings puts on the clipboard

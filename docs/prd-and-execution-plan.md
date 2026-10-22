@@ -20,6 +20,7 @@ Items marked **[my call]** are my defaults, not Raj's decisions. Items marked **
 | M6 Jenkins | Done and tested against a mock server (auth, folders, filters, live progress, offline and recovery). Not yet run against a real server |
 | M7 Claude usage | Done: live ears while working, sessions panel, tokens today. Plan limits are not stored locally, so not shown |
 | M8 Slack + Gmail (multi-account) | Not started |
+| Calendar (added) | Done: next-meeting chip and panel with Join for Meet/Zoom/Teams/Webex, countdown beside the collapsed notch five minutes before a meeting. Off until enabled; Calendar access is requested only from its button. Not yet tried against Raj's real calendar |
 | M9 Design polish | In progress: adaptive system material, light and dark |
 | M10 Commercial (licensing, updates, notarization) | Packaging script (`scripts/dmg.sh`) with signing and notarization hooks is done; needs a Developer ID to use. Licensing and auto-update not started. Settings window and first-run welcome are done |
 | M11 Calls | Not started |
