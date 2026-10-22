@@ -16,4 +16,4 @@ Grant Accessibility (jump to windows) and Screen Recording (window titles) from 
 - `Sources/NotchCore`: notch panel, geometry, hover. Knows nothing about windows.
 - `Sources/NotchHub`: the app, wires the two together.
 
-Tests use Swift Testing and need full Xcode to run (`swift test`).
+Requires macOS 14+. Tests use Swift Testing and need full Xcode to run (`swift test`).
