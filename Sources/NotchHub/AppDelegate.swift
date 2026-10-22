@@ -12,11 +12,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let web = WebBrowser()
     private let learning = LearningStore()
     private let jenkins = JenkinsModel()
+    private let calendar = CalendarModel()
     private lazy var live = LiveActivityModel(claude: claude, jenkins: jenkins)
     private lazy var hub = IntegrationHub(integrations: [
         ClaudeIntegration(model: claude),
         GitHubIntegration(model: github),
         JenkinsIntegration(model: jenkins),
+        CalendarIntegration(model: calendar),
     ])
     private let settings = AppSettings.shared
     private let presenter = WindowPresenter()

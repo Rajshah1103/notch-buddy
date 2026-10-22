@@ -4,5 +4,7 @@
 <dict>
     <!-- Lets the app send Apple events to browsers to read their tabs. Required under the hardened runtime. -->
     <key>com.apple.security.automation.apple-events</key><true/>
+    <!-- Lets the app read calendar events once the user allows it. -->
+    <key>com.apple.security.personal-information.calendars</key><true/>
 </dict>
 </plist>

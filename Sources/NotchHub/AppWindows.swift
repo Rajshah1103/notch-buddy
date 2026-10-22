@@ -285,6 +285,13 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            Section("Calendar") {
+                Toggle("Show next meeting", isOn: $settings.showCalendar)
+                if settings.showCalendar {
+                    Text("Reads events from the Calendar app and offers a Join button for Meet, Zoom, Teams and Webex links.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Section("Jenkins") {
                 Toggle("Show builds", isOn: $settings.showJenkins)
                 if settings.showJenkins { JenkinsSettings(settings: settings) }

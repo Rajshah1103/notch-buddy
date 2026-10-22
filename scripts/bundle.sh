@@ -27,6 +27,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSCalendarsFullAccessUsageDescription</key><string>Notch Hub shows your next meeting and a button to join it. Events stay on this Mac.</string>
     <key>NSAppleEventsUsageDescription</key><string>Notch Hub reads your browser tabs so you can jump straight to one.</string>
 </dict>
 </plist>

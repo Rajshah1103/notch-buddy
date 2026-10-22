@@ -1,4 +1,5 @@
 import AppKit
+import CalendarKit
 import ClaudeUsage
 import GitHubKit
 import JenkinsKit
@@ -12,7 +13,7 @@ import WindowEngine
 enum Preview {
     static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?, manyApps: Int = 0,
                        claudePanel: Bool = false, githubPanel: Bool = false, githubConnect: Bool = false,
-                       jenkinsPanel: Bool = false, live: Bool = false, liveBuild: Bool = false) {
+                       jenkinsPanel: Bool = false, calendarPanel: Bool = false, live: Bool = false, liveBuild: Bool = false) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
@@ -33,6 +34,9 @@ enum Preview {
         let jenkins = JenkinsModel()
         jenkins.loadForPreview(sampleJenkins())
         AppSettings.shared.showJenkins = true      // off by default; renders show it
+        let calendar = CalendarModel()
+        calendar.loadForPreview(sampleMeetings())
+        AppSettings.shared.showCalendar = true
         let web = WebBrowser()
         web.loadForPreview([
             BrowserProfile(directory: "Default", name: "Personal", email: "raj@example.com"),
@@ -44,8 +48,8 @@ enum Preview {
         let github = GitHubModel()
         github.loadForPreview(githubConnect ? nil : sampleGitHub(), needsToken: githubConnect)
         let hub = IntegrationHub(integrations: [ClaudeIntegration(model: claude), GitHubIntegration(model: github),
-                                                JenkinsIntegration(model: jenkins)])
-        PreviewSeed.integration = claudePanel ? "claude" : githubPanel ? "github" : jenkinsPanel ? "jenkins" : nil
+                                                JenkinsIntegration(model: jenkins), CalendarIntegration(model: calendar)])
+        PreviewSeed.integration = claudePanel ? "claude" : githubPanel ? "github" : jenkinsPanel ? "jenkins" : calendarPanel ? "calendar" : nil
         let model = WindowsModel()
         for n in 0..<manyApps {
             let symbols = ["safari", "message", "music.note", "photo", "calendar", "envelope", "map", "doc.text", "gearshape", "terminal"]
@@ -232,4 +236,23 @@ enum Preview {
         copy.minimized = snapshot.minimized.map(retitled)
         return copy
     }
+}
+
+
+/// Invented meetings for preview renders; nothing here comes from a real calendar.
+@MainActor
+private func sampleMeetings() -> [Meeting] {
+    let now = Date()
+    func at(_ minutes: Double, _ length: Double, _ title: String, color: [Double], join: String? = nil) -> Meeting {
+        Meeting(id: title, title: title, start: now.addingTimeInterval(minutes * 60), end: now.addingTimeInterval((minutes + length) * 60),
+                isAllDay: false, calendarName: "Work", calendarColor: color, joinURL: join.flatMap(URL.init(string:)))
+    }
+    let blue = [0.2, 0.5, 0.95], green = [0.2, 0.75, 0.4], orange = [0.95, 0.6, 0.2]
+    return [
+        at(-10, 30, "Sprint planning", color: blue, join: "https://meet.google.com/abc-defg-hij"),
+        at(4, 15, "Standup", color: blue, join: "https://meet.google.com/xyz-abcd-efg"),
+        at(75, 45, "Design review", color: green, join: "https://acme.zoom.us/j/123456789"),
+        at(150, 30, "1:1 with Priya", color: orange),
+        at(260, 60, "Quarterly planning", color: blue, join: "https://teams.microsoft.com/l/meetup-join/abc"),
+    ]
 }

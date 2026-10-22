@@ -67,6 +67,7 @@ final class AppSettings: ObservableObject {
     @Published var showGitHub: Bool { didSet { defaults.set(showGitHub, forKey: "showGitHub"); changed() } }
     /// Fall back to the GitHub command line tool's login when no token has been pasted.
     @Published var githubUsesCommandLine: Bool { didSet { defaults.set(githubUsesCommandLine, forKey: "githubUsesCommandLine"); changed() } }
+    @Published var showCalendar: Bool { didSet { defaults.set(showCalendar, forKey: "showCalendar"); changed() } }
     @Published var showJenkins: Bool { didSet { defaults.set(showJenkins, forKey: "showJenkins"); changed() } }
     @Published var jenkinsURL: String { didSet { defaults.set(jenkinsURL, forKey: "jenkinsURL"); changed() } }
     @Published var jenkinsUser: String { didSet { defaults.set(jenkinsUser, forKey: "jenkinsUser"); changed() } }
@@ -94,6 +95,7 @@ final class AppSettings: ObservableObject {
         hiddenApps = Set(defaults.stringArray(forKey: "hiddenApps") ?? [])
         showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
         githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true
+        showCalendar = defaults.bool(forKey: "showCalendar")      // off until chosen, so no permission prompt appears unasked
         showJenkins = defaults.bool(forKey: "showJenkins")
         jenkinsURL = defaults.string(forKey: "jenkinsURL") ?? ""
         jenkinsUser = defaults.string(forKey: "jenkinsUser") ?? ""
