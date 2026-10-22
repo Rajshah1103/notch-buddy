@@ -77,7 +77,7 @@ final class AppSettings: ObservableObject {
     var onChange: (() -> Void)?
 
     private init() {
-        hoverDelayMs = defaults.object(forKey: "hoverDelayMs") as? Double ?? 60
+        hoverDelayMs = defaults.object(forKey: "hoverDelayMs") as? Double ?? 40
         showClaudeActivity = defaults.object(forKey: "showClaudeActivity") as? Bool ?? true
         showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
         githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true

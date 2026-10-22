@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             content: { state in AnyView(SwitcherView(model: model, hub: hub, notch: state)) },
             liveContent: { state in AnyView(LiveView(model: liveModel, notch: state)) }
         )
+        notch?.trace = { PerfProbe.log($0) }
         PerfProbe.startStallWatchdog()
 
         // While Claude Code works, the collapsed notch widens into a live activity.
@@ -45,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         AppActions.openSettings = { [weak self] in self?.showSettings() }
         model.startTrackingRecents()
+        model.startTrackingSpaces()
         notch?.start()
         model.refresh(previews: false)
         setUpStatusItem()
@@ -82,6 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SettingsView(settings: settings) { [weak self] in self?.showWelcome() }
         }
     }
+
+    @objc private func showWelcomeWindow() { showWelcome() }
 
     private func showWelcome() {
         presenter.show("welcome", title: "Welcome to Notch Hub") {
@@ -124,7 +128,7 @@ extension AppDelegate: NSMenuDelegate {
         let missing = PermissionKind.allCases.filter { Permissions.state(of: $0) == .notGranted }
         if !missing.isEmpty {
             let item = menu.addItem(withTitle: "\(missing.count) permission\(missing.count == 1 ? "" : "s") needed…",
-                                    action: #selector(showSettings), keyEquivalent: "")
+                                    action: #selector(showWelcomeWindow), keyEquivalent: "")
             item.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
         }
         menu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",")

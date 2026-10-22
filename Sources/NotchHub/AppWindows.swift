@@ -14,19 +14,33 @@ struct PermissionRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            statusIcon
+            statusIcon.accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(kind.title).font(.system(size: 13, weight: .semibold))
                 Text(detail).font(.system(size: 12)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Read as one item ("Accessibility, not allowed"), while the button stays separately reachable.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(kind.title), \(stateWords)")
+            .accessibilityValue(detail)
             Spacer(minLength: 12)
             if !state.isGranted {
                 Button(buttonTitle, action: onGrant).controlSize(.small)
+                    .accessibilityLabel("\(buttonTitle) \(kind.title)")
             }
         }
         .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var stateWords: String {
+        switch state {
+        case .granted: return "allowed"
+        case .notGranted: return "not allowed"
+        case .notDetermined: return "not asked yet"
+        case .unknown(let reason): return "unknown, \(reason)"
+        }
     }
 
     private var detail: String {
@@ -35,10 +49,11 @@ struct PermissionRow: View {
     }
 
     private var buttonTitle: String {
+        // Pressing it asks macOS first (which is what adds the app to System Settings' list), then
+        // opens the right Settings pane if the answer is not immediate.
         switch state {
-        case .notGranted: return "Open Settings"
         case .unknown: return "Check"
-        default: return "Allow"
+        default: return "Allow…"
         }
     }
 
@@ -52,6 +67,31 @@ struct PermissionRow: View {
         case .unknown:
             Image(systemName: "questionmark.circle").foregroundStyle(.secondary).font(.system(size: 20))
         }
+    }
+}
+
+/// Help for the case where the app is missing from a System Settings list, or listed but not working.
+struct PermissionHelp: View {
+    @State private var resetMessage: String?
+
+    var body: some View {
+        DisclosureGroup("Not in the list, or switched on but not working?") {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("macOS only lists an app after it has asked. Press Allow above first. If it still isn't there, click the + in System Settings and choose Notch Hub from your Applications folder.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text("An app that was rebuilt or moved can be listed and switched on yet ignored. Resetting removes the old entries so you can allow it fresh.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Show Notch Hub in Finder") { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) }
+                    Button("Reset permissions") { resetMessage = Permissions.resetAll() }
+                    Button("Restart Notch Hub") { Permissions.relaunch() }
+                }
+                .controlSize(.small)
+                if let resetMessage { Text(resetMessage).font(.caption).foregroundStyle(.secondary) }
+            }
+            .padding(.top, 4)
+        }
+        .font(.system(size: 12))
     }
 }
 
@@ -143,13 +183,13 @@ struct SettingsView: View {
                                                       set: { settings.setLaunchesAtLogin($0) }))
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Hover to open")
+                        Text("Hover pause")
                         Spacer()
-                        Text(settings.hoverDelayMs == 0 ? "Instant" : "\(Int(settings.hoverDelayMs)) ms")
+                        Text(settings.hoverDelayMs == 0 ? "None" : "\(Int(settings.hoverDelayMs)) ms")
                             .foregroundStyle(.secondary).monospacedDigit()
                     }
                     Slider(value: $settings.hoverDelayMs, in: 0...300, step: 10)
-                    Text("How long the pointer rests on the notch before it opens. A short pause stops it opening when you brush past on the way to a menu bar icon.")
+                    Text("Move to the notch at a normal pace and it opens at once. If you swoop in fast, it waits for you to stop for this long, so sweeping past it on the way to a menu bar icon doesn't open it.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -218,8 +258,9 @@ struct SettingsView: View {
                     }
                 }
             } footer: {
-                Text("macOS asks for these once. Notch Hub never records your screen or sends anything off your Mac.")
+                Text("macOS asks for these once. Notch Hub never records your screen or sends anything off your Mac. After allowing Screen Recording, restart Notch Hub so previews start working.")
             }
+            Section { PermissionHelp() }
         }
         .formStyle(.grouped)
     }
@@ -323,6 +364,8 @@ struct WelcomeView: View {
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.primary.opacity(0.05)))
 
+            PermissionHelp()
+
             VStack(spacing: 8) {
                 Button(action: onDone) {
                     Text(permissions.allGranted ? "Start using Notch Hub" : "Continue")
@@ -338,7 +381,7 @@ struct WelcomeView: View {
             }
         }
         .padding(28)
-        .frame(width: 460)
+        .frame(width: 480)
         .onAppear { permissions.startPolling() }
         .onDisappear { permissions.stopPolling() }
     }

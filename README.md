@@ -5,13 +5,19 @@ tabs), jump to any of them in one click, or press **Control-Option-Space** and t
 While Claude Code is working, the collapsed notch widens into a live activity.
 Product plan: `docs/prd-and-execution-plan.md`.
 
-## Run
+## Install and run
 
-    ./scripts/bundle.sh && open build/NotchHub.app
+    ./scripts/install.sh        builds, installs to /Applications/Notch Hub.app, and opens it
+
+(`./scripts/bundle.sh` just builds `build/Notch Hub.app`.) The first launch opens a welcome window with an
+Allow button for each permission; pressing one is what makes the app appear in System Settings'
+Privacy & Security lists. If it still isn't listed, or is listed but ignored after a rebuild, the
+permissions help in the welcome and Settings has "Show in Finder" and "Reset permissions".
 
 Grant these once from the menu bar item or the hint at the bottom of the notch:
 Accessibility (jump to windows), Automation (read browser tabs), Screen Recording (live previews and
-Chrome profile names). Requires macOS 14+. The build is ad-hoc signed, so macOS asks again after a rebuild.
+Chrome profile names). Requires macOS 14+. Local builds are ad-hoc signed, so macOS may ask for the permissions again after a rebuild;
+a Developer ID signature (see Packaging) makes them stick.
 
 ## Packaging
 
@@ -23,7 +29,8 @@ Chrome profile names). Requires macOS 14+. The build is ad-hoc signed, so macOS 
 
 ## Using it
 
-- **Hover the notch**: the app row shows your running apps, most recent first. Hover an app to list its
+- **Hover the notch**: it opens at once when you move to it at a normal pace, and waits for you to stop if you
+  swoop in fast (so sweeping past it to a menu bar icon does nothing). The app row shows your running apps, most recent first. Hover an app to list its
   windows (Chrome: its tabs, grouped by window and profile). Click an app to jump to it.
 - **Control-Option-Space**, or the Search button: type to filter windows, tabs and apps. Up/Down choose,
   Return jumps, Esc closes.

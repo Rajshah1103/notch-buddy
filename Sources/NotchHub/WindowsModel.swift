@@ -40,6 +40,19 @@ final class WindowsModel: ObservableObject {
         }
     }
 
+    /// A window can only be captured while its Space is on screen. Capturing whenever the Space changes
+    /// means previews fill in as you move around, so they are ready the first time you open the notch there.
+    func startTrackingSpaces() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            // Let the Space transition animation finish so the windows are really on screen.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                MainActor.assumeIsolated { self?.refresh(previews: true, force: true) }
+            }
+        }
+    }
+
     private func noteActivated(_ pid: Int32) {
         guard pid != ProcessInfo.processInfo.processIdentifier else { return }
         recents.removeAll { $0 == pid }
@@ -49,9 +62,9 @@ final class WindowsModel: ObservableObject {
 
     /// Stale-while-revalidate: the view keeps showing the last data while new data loads.
     /// Called when the pointer nears the notch (data only) and when it opens (data and previews).
-    func refresh(previews: Bool) {
+    func refresh(previews: Bool, force: Bool = false) {
         refreshBrowsers()
-        if Date().timeIntervalSince(lastRefresh) < maxAge {
+        if !force, Date().timeIntervalSince(lastRefresh) < maxAge {
             if previews { refreshThumbnails() }
             return
         }

@@ -86,6 +86,36 @@ enum Permissions {
     static func requestScreenRecording() { request(.screenRecording) }
     static func openAutomationSettings() { request(.automation) }
 
+    /// Removes this app's saved permission entries (they can go stale when the app is rebuilt or moved),
+    /// so macOS asks again from scratch. Returns a sentence for the user.
+    static func resetAll() -> String {
+        guard let id = Bundle.main.bundleIdentifier else { return "Couldn't find this app's identifier." }
+        var failed = false
+        for service in ["Accessibility", "ScreenCapture", "AppleEvents"] {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+            process.arguments = ["reset", service, id]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            if (try? process.run()) == nil { failed = true; continue }
+            process.waitUntilExit()
+            if process.terminationStatus != 0 { failed = true }
+        }
+        return failed
+            ? "Some entries couldn't be cleared from here. In System Settings, select Notch Hub and press the minus button, then press Allow again."
+            : "Cleared. Press Allow on each item above, then restart Notch Hub."
+    }
+
+    /// Starts a fresh copy of the app and quits this one (needed after Screen Recording is allowed).
+    static func relaunch() {
+        let url = Bundle.main.bundleURL
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+    }
+
     private static func openSettings(_ pane: String) {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") {
             NSWorkspace.shared.open(url)
