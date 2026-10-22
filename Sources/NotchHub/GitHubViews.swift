@@ -33,7 +33,7 @@ struct GitHubChip: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .pointerHover { hovering = $0 }
         .help("GitHub pull requests")
         .accessibilityLabel(accessibilitySummary)
         .accessibilityHint("Shows pull requests waiting for your review and the state of yours")
@@ -162,7 +162,7 @@ private struct PullRequestRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
-        .onHover { hovering = $0 }
+        .pointerHover { hovering = $0 }
         .accessibilityLabel("\(pr.title), \(pr.shortReference)")
         .accessibilityHint("Opens the pull request on GitHub")
     }

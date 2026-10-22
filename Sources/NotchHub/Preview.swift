@@ -30,6 +30,14 @@ enum Preview {
         let jenkins = JenkinsModel()
         jenkins.loadForPreview(sampleJenkins())
         AppSettings.shared.showJenkins = true      // off by default; renders show it
+        let web = WebBrowser()
+        web.loadForPreview([
+            BrowserProfile(directory: "Default", name: "Personal", email: "raj@example.com"),
+            BrowserProfile(directory: "Profile 1", name: "Work", email: "raj@acme.dev"),
+            BrowserProfile(directory: "Profile 2", name: "Client A", email: "raj@clienta.io"),
+            BrowserProfile(directory: "Profile 3", name: "Side project", email: nil),
+            BrowserProfile(directory: "Profile 4", name: "Testing", email: nil),
+        ], lastUsed: "Profile 1")
         let github = GitHubModel()
         github.loadForPreview(githubConnect ? nil : sampleGitHub(), needsToken: githubConnect)
         let hub = IntegrationHub(integrations: [ClaudeIntegration(model: claude), GitHubIntegration(model: github),
@@ -40,7 +48,7 @@ enum Preview {
 
         if live || liveBuild { renderLive(to: path, activity: LiveActivityModel(claude: claude, jenkins: jenkins), state: state, light: light); return }
 
-        let root = SwitcherView(model: model, hub: hub, notch: state)
+        let root = SwitcherView(model: model, hub: hub, web: web, notch: state)
             .frame(width: size.width, height: size.height)
             // Stand-in for the system material, which only exists inside a real window.
             .background(

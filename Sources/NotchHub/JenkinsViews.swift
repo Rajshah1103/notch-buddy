@@ -38,7 +38,7 @@ struct JenkinsChip: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .pointerHover { hovering = $0 }
         .help("Jenkins builds")
         .accessibilityLabel(summary)
         .accessibilityHint("Shows running and failing Jenkins builds")
@@ -191,7 +191,7 @@ private struct BuildRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
-        .onHover { hovering = $0 }
+        .pointerHover { hovering = $0 }
         .accessibilityLabel("\(job.name), \(accessibilityState)")
         .accessibilityHint("Opens the job in your browser")
     }

@@ -31,7 +31,7 @@ struct ClaudeChip: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .pointerHover { hovering = $0 }
         .help("Claude Code")
         .accessibilityLabel("Claude usage, \(model.snapshot.isWorking ? "working now" : "idle"), \(TokenFormat.short(model.snapshot.tokensToday)) tokens today")
         .accessibilityHint("Shows Claude Code sessions and tokens used today")

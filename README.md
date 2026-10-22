@@ -42,7 +42,10 @@ signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Devel
   swoop in fast (so sweeping past it to a menu bar icon does nothing). The app row shows your running apps, most recent first. Hover an app to list its
   windows (Chrome: its tabs, grouped by window and profile). Click an app to jump to it.
 - **Control-Option-Space**, or the Search button: type to filter windows, tabs and apps. Up/Down choose,
-  Return jumps, Esc closes.
+  Return jumps, Esc closes. Type a web address, or any words, and an "Open in Chrome" row appears (first
+  for an address, last for words); its right-hand pane lists your Chrome profiles, so you click or use ← →
+  to pick which one the new tab opens in. Command-Return always searches the web, even when something
+  open matches. Chromium browsers only (Chrome, Brave, Edge); the search engine is a setting.
 - **Chips** (top left of the open notch): Claude Code sessions and tokens used today; GitHub review
   requests and the check state of your pull requests (connect with a token, or it uses your `gh` login).
 - **Jenkins**: turn it on in Settings, add the address, username and API token, and press Test
@@ -53,7 +56,7 @@ signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Devel
 
 ## Layout
 
-- `Sources/WindowEngine`: Spaces, windows, browser tabs, grouping, search. The only place private macOS
+- `Sources/WindowEngine`: Spaces, windows, browser tabs, browser profiles, grouping, search. The only place private macOS
   APIs live.
 - `Sources/ClaudeUsage`: live Claude Code activity and token counts from its local transcripts.
 - `Sources/GitHubKit`: pull requests and check state from GitHub's GraphQL API, token handling.

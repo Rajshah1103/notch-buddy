@@ -8,11 +8,14 @@ import WindowEngine
 struct SwitcherView: View {
     @ObservedObject var model: WindowsModel
     @ObservedObject var hub: IntegrationHub
+    @ObservedObject var web: WebBrowser
     let notch: NotchState
 
     @State private var selectedID: Int32?
     /// Only the preview pane observes this, so moving across rows does not re-render the list.
     @StateObject private var hover = HoverStore()
+    /// Hit testing for hover: see PointerHover.swift.
+    @StateObject private var pointer = HoverHub()
 
     /// The integration whose panel replaces the app list, if any.
     @State private var openIntegration: String? = PreviewSeed.integration
@@ -30,8 +33,13 @@ struct SwitcherView: View {
         VStack(spacing: 0) {
             ears(notch.geometry)
             if searching {
-                SearchPanel(model: model, query: $query, selection: $selection, focus: $fieldFocused,
-                            onOpen: open, onClose: { notch.collapse() })
+                SearchPanel(model: model, web: web, settings: .shared, query: $query, selection: $selection,
+                            focus: $fieldFocused, onOpen: open,
+                            onWeb: { action, profile in
+                                web.open(action.url, in: profile)
+                                notch.collapse()
+                            },
+                            onClose: { notch.collapse() })
                     .padding(.top, 8)
             } else if let id = openIntegration, let integration = hub.integration(id) {
                 integration.panel(notch: notch).padding(.top, 10)
@@ -48,6 +56,9 @@ struct SwitcherView: View {
         }
         .padding(.horizontal, 28)
         .overlay(alignment: .bottom) { Hint(model: model).padding(.bottom, 8) }
+        .environment(\.hoverHub, pointer)
+        .coordinateSpace(name: "notch")
+        .onAppear { notch.pointerHandler = { [pointer] in pointer.pointerMoved($0) } }
         .onReceive(notch.$isExpanded) { expanded in
             // Start each visit from the default: the app you are in, nothing hovered.
             if !expanded { selectedID = nil; hover.entry = nil; openIntegration = nil }
@@ -191,7 +202,7 @@ private struct DockItem: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
-        .onHover { if $0 { onHover() } }
+        .pointerHover { if $0 { onHover() } }
         .accessibilityLabel(group.name)
         .accessibilityHint("Open \(group.name)")
     }
@@ -232,7 +243,7 @@ private struct Detail: View {
 
     var body: some View {
         let (packed, wide) = pack()
-        let columnWidth: CGFloat = wide ? 300 : 292
+        let columnWidth: CGFloat = wide ? 300 : 290
 
         VStack(alignment: .leading, spacing: 8) {
             title
@@ -261,7 +272,7 @@ private struct Detail: View {
                         .frame(width: columnWidth)
                     }
                 }
-                if !wide { PreviewHost(model: model, hover: hover, group: group) }
+                if !wide { PreviewHost(model: model, hover: hover, group: group, width: packed.columns.count == 1 ? 560 : 338) }
             }
         }
     }
@@ -290,11 +301,15 @@ private struct PreviewHost: View {
     @ObservedObject var model: WindowsModel
     @ObservedObject var hover: HoverStore
     let group: AppGroup
+    let width: CGFloat
 
     var body: some View {
         if let entry = hover.entry ?? group.primary {
             PreviewPane(entry: entry, icon: model.icons[group.pid],
-                        thumbnail: entry.thumbnailWindowID.flatMap { model.thumbnails[$0] })
+                        thumbnail: entry.thumbnailWindowID.flatMap { model.thumbnails[$0] },
+                        sharp: entry.thumbnailWindowID.flatMap { model.largeThumbnails[$0] }, width: width)
+                // Ask for a sharp capture once the pointer settles on a window (not on every row it crosses).
+                .task(id: entry.thumbnailWindowID) { model.requestLarge(entry.thumbnailWindowID) }
         }
     }
 }
@@ -353,7 +368,7 @@ private struct EntryRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
-        .onHover { hovering in
+        .pointerHover { hovering in
             isHovered = hovering
             if hovering { onHover() }
         }
@@ -410,20 +425,29 @@ private struct Monogram: View {
 private struct PreviewPane: View {
     let entry: Entry
     let icon: NSImage?
+    /// The tile-sized capture, and a sharper one if it has arrived. Either may be missing.
     let thumbnail: NSImage?
+    let sharp: NSImage?
+    var width: CGFloat = 340
+
+    /// The picture is shown whole, never cropped, at the window's own proportions.
+    private var imageHeight: CGFloat {
+        let image = sharp ?? thumbnail
+        guard let image, image.size.width > 0 else { return width * 0.5 }
+        return min(width * image.size.height / image.size.width, width > 400 ? 250 : 205)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack {
-                if let thumbnail {
-                    Image(nsImage: thumbnail).resizable().aspectRatio(contentMode: .fill)
+                Theme.fillQuiet
+                if let image = sharp ?? thumbnail {
+                    Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
                 } else {
-                    Theme.fillQuiet
                     Leading(entry: entry, icon: icon, size: 52)
                 }
             }
-            .frame(height: 150)
-            .frame(maxWidth: .infinity)
+            .frame(width: width, height: imageHeight)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
@@ -448,7 +472,7 @@ private struct PreviewPane: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(width: 300)
+        .frame(width: width)
     }
 
     /// "github.com/acme/api/pull/482": the address without the scheme noise.
@@ -483,7 +507,7 @@ private struct SearchButton: View {
             .contentShape(Capsule())
         }
         .buttonStyle(PressStyle())
-        .onHover { hovering = $0 }
+        .pointerHover { hovering = $0 }
         .accessibilityLabel("Search windows and tabs")
     }
 }
@@ -491,58 +515,127 @@ private struct SearchButton: View {
 /// Type to find anything open. ↑ ↓ choose, Return jumps, Esc closes.
 private struct SearchPanel: View {
     @ObservedObject var model: WindowsModel
+    @ObservedObject var web: WebBrowser
+    @ObservedObject var settings: AppSettings
     @Binding var query: String
     @Binding var selection: Int
     var focus: FocusState<Bool>.Binding
     let onOpen: (Entry) -> Void
+    let onWeb: (WebAction, BrowserProfile?) -> Void
     let onClose: () -> Void
 
+    /// The profile highlighted for the next web action (nil until chosen: then the saved or last-used one).
+    @State private var profileDirectory: String?
     private let visibleRows = 8
 
+    private enum Row: Identifiable {
+        case result(SearchResult)
+        case web(WebAction)
+
+        var id: String {
+            switch self {
+            case .result(let result): return result.id
+            case .web: return "web-action"
+            }
+        }
+    }
+
+    private var activeProfile: BrowserProfile? {
+        web.profiles.first { $0.directory == profileDirectory } ?? web.defaultProfile(preferred: settings.webProfile)
+    }
+
     var body: some View {
+        let action = WebAction.classify(query, engine: settings.searchEngine)
         let all = Search.results(for: query, in: model.groups)
-        let shown = Array(all.prefix(visibleRows))
-        let current = shown.indices.contains(selection) ? shown[selection] : shown.first
+        let matches = Array(all.prefix(visibleRows - (action == nil ? 0 : 1))).map(Row.result)
+        // A typed address goes first (you probably want to go there); plain words go last, after anything
+        // you already have open that matches.
+        let rows: [Row] = action.map { $0.kind == .address ? [.web($0)] + matches : matches + [.web($0)] } ?? matches
+        let current = rows.indices.contains(selection) ? rows[selection] : rows.first
 
         VStack(alignment: .leading, spacing: 12) {
-            field(count: shown.count)
+            field(count: all.count)
             HStack(alignment: .top, spacing: 14) {
                 VStack(spacing: 2) {
-                    if shown.isEmpty {
+                    if rows.isEmpty {
                         empty
                     } else {
-                        ForEach(Array(shown.enumerated()), id: \.element.id) { index, result in
-                            EntryRow(entry: result.entry.withSubtitle(subtitle(for: result)),
-                                     icon: model.icons[result.appPID], isSelected: index == selection,
-                                     onHover: { selection = index }, onOpen: { onOpen(result.entry) })
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                            switch row {
+                            case .result(let result):
+                                EntryRow(entry: result.entry.withSubtitle(subtitle(for: result)),
+                                         icon: model.icons[result.appPID], isSelected: index == selection,
+                                         onHover: { selection = index }, onOpen: { onOpen(result.entry) })
+                            case .web(let action):
+                                WebRow(action: action, browser: web.browserName, profile: activeProfile?.name,
+                                       isSelected: index == selection,
+                                       onHover: { selection = index }, onOpen: { openWeb(action, activeProfile) })
+                            }
                         }
-                        if all.count > shown.count {
-                            Text("\(all.count - shown.count) more · keep typing to narrow")
+                        if all.count > matches.count {
+                            Text("\(all.count - matches.count) more · keep typing to narrow")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(Theme.textSecondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 10)
-                                .frame(height: 28)
+                                .frame(height: 24)
+                        }
+                        if case .web = current, web.profiles.count > 1 {
+                            Text("← → choose a profile  ·  ⌘↩ always search the web")
+                                .font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10).padding(.top, 4)
                         }
                     }
                     Spacer(minLength: 0)
                 }
-                .frame(width: 590)
+                .frame(width: 592)
 
-                if let current {
-                    PreviewPane(entry: current.entry, icon: model.icons[current.appPID],
-                                thumbnail: current.entry.thumbnailWindowID.flatMap { model.thumbnails[$0] })
+                switch current {
+                case .result(let result)?:
+                    PreviewPane(entry: result.entry, icon: model.icons[result.appPID],
+                                thumbnail: result.entry.thumbnailWindowID.flatMap { model.thumbnails[$0] },
+                                sharp: result.entry.thumbnailWindowID.flatMap { model.largeThumbnails[$0] }, width: 338)
+                        .task(id: result.entry.thumbnailWindowID) { model.requestLarge(result.entry.thumbnailWindowID) }
+                case .web(let action)?:
+                    ProfilePicker(action: action, browser: web.browserName, profiles: web.profiles, selected: activeProfile,
+                                  onHighlight: { profileDirectory = $0.directory },
+                                  onPick: { openWeb(action, $0) })
+                case nil:
+                    EmptyView()
                 }
             }
         }
+        .onAppear { web.reload() }
         .onChange(of: query) { selection = 0 }
-        .onKeyPress(.downArrow) { selection = min(selection + 1, max(shown.count - 1, 0)); return .handled }
+        .onKeyPress(.downArrow) { selection = min(selection + 1, max(rows.count - 1, 0)); return .handled }
         .onKeyPress(.upArrow) { selection = max(selection - 1, 0); return .handled }
-        .onKeyPress(.return) {
-            if let current { onOpen(current.entry) }
+        .onKeyPress(keys: [.leftArrow, .rightArrow]) { press in
+            // Only on the web row, where the arrows choose a profile; elsewhere they move the text cursor.
+            guard case .web? = current, web.profiles.count > 1 else { return .ignored }
+            let step = press.key == .rightArrow ? 1 : -1
+            let index = web.profiles.firstIndex { $0.id == activeProfile?.id } ?? 0
+            profileDirectory = web.profiles[(index + step + web.profiles.count) % web.profiles.count].directory
+            return .handled
+        }
+        .onKeyPress(keys: [.return], phases: .down) { press in
+            if press.modifiers.contains(.command), let action {
+                openWeb(action, activeProfile)       // always search the web, even when something matches
+                return .handled
+            }
+            switch current {
+            case .result(let result)?: onOpen(result.entry)
+            case .web(let action)?: openWeb(action, activeProfile)
+            case nil: break
+            }
             return .handled
         }
         .onKeyPress(.escape) { onClose(); return .handled }
+    }
+
+    private func openWeb(_ action: WebAction, _ profile: BrowserProfile?) {
+        settings.webProfile = profile?.directory       // remembered for next time
+        onWeb(action, profile)
     }
 
     private func field(count: Int) -> some View {
@@ -550,12 +643,12 @@ private struct SearchPanel: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(Theme.textSecondary)
-            TextField("Search windows, tabs and apps", text: $query)
+            TextField("Search windows and tabs, or type an address", text: $query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 18))
                 .focused(focus)
                 .accessibilityLabel("Search")
-            Text(query.isEmpty ? "Recent" : "\(count) result\(count == 1 ? "" : "s")")
+            Text(query.isEmpty ? "Recent" : "\(count) open")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.textSecondary)
             Text("esc")
@@ -571,9 +664,9 @@ private struct SearchPanel: View {
 
     private var empty: some View {
         VStack(spacing: 6) {
-            Image(systemName: "questionmark.circle").font(.system(size: 22)).foregroundStyle(Theme.textSecondary)
-            Text("Nothing matches “\(query)”").font(.system(size: 13, weight: .medium))
-            Text("Try part of a title, a site, or an app name")
+            Image(systemName: "magnifyingglass").font(.system(size: 22)).foregroundStyle(Theme.textSecondary)
+            Text("Type to search what's open").font(.system(size: 13, weight: .medium))
+            Text("or type an address or any words to open them on the web")
                 .font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity)
@@ -583,6 +676,124 @@ private struct SearchPanel: View {
     /// "Google Chrome · github.com": results from different apps need to say where they live.
     private func subtitle(for result: SearchResult) -> String {
         [result.appName, result.entry.subtitle].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+}
+
+/// "Search Google for “swift”" or "Open github.com/acme", and which profile it will open in.
+private struct WebRow: View {
+    let action: WebAction
+    let browser: String
+    let profile: String?
+    let isSelected: Bool
+    let onHover: () -> Void
+    let onOpen: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 10) {
+                Image(systemName: action.kind == .address ? "globe" : "magnifyingglass")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.accent))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(action.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                    Text([browser, profile].compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 11)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Text("↩").font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .background(RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(isHovered || isSelected ? Theme.fillHover : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle())
+        .pointerHover { hovering in
+            isHovered = hovering
+            if hovering { onHover() }
+        }
+        .accessibilityLabel("\(action.title) in \(browser)\(profile.map { ", profile \($0)" } ?? "")")
+    }
+}
+
+/// The right-hand pane for the web row: where it will open, and a click-to-choose list of profiles.
+private struct ProfilePicker: View {
+    let action: WebAction
+    let browser: String
+    let profiles: [BrowserProfile]
+    let selected: BrowserProfile?
+    let onHighlight: (BrowserProfile) -> Void
+    let onPick: (BrowserProfile) -> Void
+    private let visible = 5
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("New tab in \(browser)").font(.system(size: 14, weight: .semibold))
+            Text(action.url.absoluteString)
+                .font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                .lineLimit(2).truncationMode(.middle)
+
+            if profiles.count > 1 {
+                Text("Open as").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textSecondary).padding(.top, 4)
+                VStack(spacing: 2) {
+                    ForEach(profiles.prefix(visible)) { profile in
+                        ProfileRow(profile: profile, isSelected: profile.id == selected?.id,
+                                   onHover: { onHighlight(profile) }, onPick: { onPick(profile) })
+                    }
+                    if profiles.count > visible {
+                        Text("\(profiles.count - visible) more · use ← →")
+                            .font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                            .padding(.horizontal, 8).padding(.top, 2)
+                    }
+                }
+            } else {
+                Text("Opens a new tab in your \(profiles.isEmpty ? "default browser" : "only profile").")
+                    .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(width: 338, alignment: .leading)
+    }
+}
+
+private struct ProfileRow: View {
+    let profile: BrowserProfile
+    let isSelected: Bool
+    let onHover: () -> Void
+    let onPick: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onPick) {
+            HStack(spacing: 9) {
+                Monogram(host: profile.name, size: 24)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(profile.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                    if let email = profile.email {
+                        Text(email).font(.system(size: 11)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+                if isSelected { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.accent) }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 38)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isHovered || isSelected ? Theme.fillHover : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle())
+        .pointerHover { hovering in
+            isHovered = hovering
+            if hovering { onHover() }
+        }
+        .accessibilityLabel("\(profile.name)\(profile.email.map { ", \($0)" } ?? "")")
+        .accessibilityHint("Opens it in this profile")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -619,7 +830,7 @@ private struct DesktopPills: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(PressStyle())
-            .onHover { hovering = $0 }
+            .pointerHover { hovering = $0 }
             .accessibilityLabel("Desktop \(number)")
         }
     }

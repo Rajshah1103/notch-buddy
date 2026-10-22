@@ -7,6 +7,10 @@ final class WindowsModel: ObservableObject {
     @Published private(set) var groups: [AppGroup] = []
     @Published private(set) var icons: [Int32: NSImage] = [:]
     @Published private(set) var thumbnails: [UInt32: NSImage] = [:]
+    /// Sharp captures of the few windows recently hovered, for the big preview pane.
+    @Published private(set) var largeThumbnails: [UInt32: NSImage] = [:]
+    private var largeOrder: [UInt32] = []
+    private var largeWork: Task<Void, Never>?
     @Published private(set) var accessibilityGranted = Permissions.accessibilityGranted
     @Published private(set) var screenRecordingGranted = Permissions.screenRecordingGranted
     /// Browsers that are running but have not been allowed to share their tabs (Automation).
@@ -162,6 +166,28 @@ final class WindowsModel: ObservableObject {
             thumbnails = updated   // one publish for the whole batch
         }
     }
+
+    /// Fetches a sharp capture of one window shortly after the pointer settles on it, so sweeping across
+    /// a list does not fire a capture per row.
+    func requestLarge(_ windowID: UInt32?) {
+        largeWork?.cancel()
+        guard capturesThumbnails, let windowID else { return }
+        if largeThumbnails[windowID] != nil, Date().timeIntervalSince(largeTaken[windowID] ?? .distantPast) < 3 { return }
+        let service = thumbnailService
+        largeWork = Task {
+            try? await Task.sleep(nanoseconds: 90_000_000)
+            let began = Date()
+            guard !Task.isCancelled else { return }
+            guard let image = await service.captureLarge(windowID) else { PerfProbe.log("sharp preview: capture returned nothing (window not capturable now)"); return }
+            PerfProbe.log("sharp preview captured: \(image.width)x\(image.height) in \(Int(Date().timeIntervalSince(began) * 1000)) ms")
+            largeThumbnails[windowID] = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+            largeTaken[windowID] = Date()
+            largeOrder.removeAll { $0 == windowID }
+            largeOrder.append(windowID)
+            while largeOrder.count > 4 { largeThumbnails[largeOrder.removeFirst()] = nil }   // keep memory small
+        }
+    }
+    private var largeTaken: [UInt32: Date] = [:]
 
     // MARK: - Actions
 

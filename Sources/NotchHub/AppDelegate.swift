@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windows = WindowsModel()
     private let claude = ClaudeModel()
     private let github = GitHubModel()
+    private let web = WebBrowser()
     private let jenkins = JenkinsModel()
     private lazy var live = LiveActivityModel(claude: claude, jenkins: jenkins)
     private lazy var hub = IntegrationHub(integrations: [
@@ -29,11 +30,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = windows
         let liveModel = live
         let hub = hub
+        let web = web
         notch = NotchManager(
             expandedSize: CGSize(width: 1000, height: 440),
             onPrefetch: { model.refresh(previews: false) },
             onExpand: { model.refresh(previews: true); hub.refresh() },
-            content: { state in AnyView(SwitcherView(model: model, hub: hub, notch: state)) },
+            content: { state in AnyView(SwitcherView(model: model, hub: hub, web: web, notch: state)) },
             liveContent: { state in AnyView(LiveView(model: liveModel, notch: state)) }
         )
         notch?.trace = { PerfProbe.log($0) }

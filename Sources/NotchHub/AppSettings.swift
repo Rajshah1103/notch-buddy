@@ -1,4 +1,5 @@
 import AppKit
+import WindowEngine
 import Carbon.HIToolbox
 import ServiceManagement
 
@@ -55,6 +56,10 @@ final class AppSettings: ObservableObject {
     /// How long the pointer must rest on the notch before it opens, in milliseconds.
     @Published var hoverDelayMs: Double { didSet { defaults.set(hoverDelayMs, forKey: "hoverDelayMs"); changed() } }
     @Published var showClaudeActivity: Bool { didSet { defaults.set(showClaudeActivity, forKey: "showClaudeActivity"); changed() } }
+    /// Used when you type something that is not an address into search and open it on the web.
+    @Published var searchEngine: SearchEngine { didSet { defaults.set(searchEngine.rawValue, forKey: "searchEngine"); changed() } }
+    /// The browser profile last chosen for opening web searches (its folder name).
+    @Published var webProfile: String? { didSet { defaults.set(webProfile, forKey: "webProfile") } }
     @Published var showGitHub: Bool { didSet { defaults.set(showGitHub, forKey: "showGitHub"); changed() } }
     /// Fall back to the GitHub command line tool's login when no token has been pasted.
     @Published var githubUsesCommandLine: Bool { didSet { defaults.set(githubUsesCommandLine, forKey: "githubUsesCommandLine"); changed() } }
@@ -79,6 +84,8 @@ final class AppSettings: ObservableObject {
     private init() {
         hoverDelayMs = defaults.object(forKey: "hoverDelayMs") as? Double ?? 40
         showClaudeActivity = defaults.object(forKey: "showClaudeActivity") as? Bool ?? true
+        searchEngine = SearchEngine(rawValue: defaults.string(forKey: "searchEngine") ?? "") ?? .google
+        webProfile = defaults.string(forKey: "webProfile")
         showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
         githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true
         showJenkins = defaults.bool(forKey: "showJenkins")

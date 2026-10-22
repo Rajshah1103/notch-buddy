@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 import GitHubKit
 import JenkinsKit
 import SwiftUI
+import WindowEngine
 
 // MARK: - Shared pieces
 
@@ -200,6 +201,11 @@ struct SettingsView: View {
                     Spacer()
                     ShortcutRecorder(binding: $settings.searchHotKey)
                 }
+                Picker("Search the web with", selection: $settings.searchEngine) {
+                    ForEach(SearchEngine.allCases) { Text($0.name).tag($0) }
+                }
+                Text("Type a web address or any words into search to open them in a new browser tab. You choose the profile each time.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section {

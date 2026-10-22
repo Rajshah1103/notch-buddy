@@ -89,7 +89,6 @@ struct LiveView: View {
             Image(systemName: "sparkle")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(Theme.claude)
-                .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
         case .build(_, let progress, _):
             ProgressRing(progress: progress).frame(width: 16, height: 16)
         case .none:
