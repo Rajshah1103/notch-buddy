@@ -7,7 +7,7 @@ public final class GitHubMonitor: @unchecked Sendable {
     public enum State: Equatable {
         case idle
         case needsToken
-        case ready(GitHubSnapshot)
+        case ready(GitHubSnapshot, source: GitHubToken.Source)
         case failed(GitHubError)
     }
 
@@ -75,7 +75,7 @@ public final class GitHubMonitor: @unchecked Sendable {
             queue.async { [self] in
                 failures = 0
                 lastFetch = Date()
-                publish(.ready(snapshot))
+                publish(.ready(snapshot, source: credentials.source))
                 if running { schedule(after: interval) }
             }
         } catch {
