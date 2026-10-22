@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let model = windows
         notch = NotchManager(
-            expandedSize: CGSize(width: 1000, height: 300),
+            expandedSize: CGSize(width: 1000, height: 340),
             onPrefetch: { model.refresh() },
             onExpand: { model.refresh(force: true) },
             content: { state in AnyView(WindowsView(model: model, notch: state)) }
