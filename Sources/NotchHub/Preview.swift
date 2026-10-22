@@ -1,6 +1,7 @@
 import AppKit
 import ClaudeUsage
 import GitHubKit
+import JenkinsKit
 import NotchCore
 import SwiftUI
 import WindowEngine
@@ -11,7 +12,7 @@ import WindowEngine
 enum Preview {
     static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?,
                        claudePanel: Bool = false, githubPanel: Bool = false, githubConnect: Bool = false,
-                       live: Bool = false) {
+                       jenkinsPanel: Bool = false, live: Bool = false, liveBuild: Bool = false) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
@@ -25,15 +26,19 @@ enum Preview {
         if let search { PreviewSeed.query = search; state.isSearching = true }
 
         let claude = ClaudeModel()
-        claude.loadForPreview(sampleClaude())
+        claude.loadForPreview(liveBuild ? .idle : sampleClaude())
+        let jenkins = JenkinsModel()
+        jenkins.loadForPreview(sampleJenkins())
+        AppSettings.shared.showJenkins = true      // off by default; renders show it
         let github = GitHubModel()
         github.loadForPreview(githubConnect ? nil : sampleGitHub(), needsToken: githubConnect)
-        let hub = IntegrationHub(integrations: [ClaudeIntegration(model: claude), GitHubIntegration(model: github)])
-        PreviewSeed.integration = claudePanel ? "claude" : githubPanel ? "github" : nil
+        let hub = IntegrationHub(integrations: [ClaudeIntegration(model: claude), GitHubIntegration(model: github),
+                                                JenkinsIntegration(model: jenkins)])
+        PreviewSeed.integration = claudePanel ? "claude" : githubPanel ? "github" : jenkinsPanel ? "jenkins" : nil
         let model = WindowsModel()
         model.loadForPreview(snapshot, browsers: demo ? sampleBrowsers(snapshot) : [:], frontApp: app)
 
-        if live { renderLive(to: path, claude: claude, state: state, light: light); return }
+        if live || liveBuild { renderLive(to: path, activity: LiveActivityModel(claude: claude, jenkins: jenkins), state: state, light: light); return }
 
         let root = SwitcherView(model: model, hub: hub, notch: state)
             .frame(width: size.width, height: size.height)
@@ -63,6 +68,7 @@ enum Preview {
     /// Renders the Settings or Welcome window content offscreen.
     static func renderWindow(_ name: String, to path: String, light: Bool) {
         _ = NSApplication.shared
+        AppSettings.shared.showJenkins = true      // off by default; the render shows its fields
         let content: AnyView = name == "welcome"
             ? AnyView(WelcomeView(onDone: {}))
             : AnyView(SettingsView(settings: AppSettings.shared, showWelcome: {}))
@@ -81,10 +87,10 @@ enum Preview {
     }
 
     /// The collapsed notch with Claude's live ears, drawn at 3x so the detail is visible.
-    private static func renderLive(to path: String, claude: ClaudeModel, state: NotchState, light: Bool) {
+    private static func renderLive(to path: String, activity: LiveActivityModel, state: NotchState, light: Bool) {
         let g = state.geometry
         let size = CGSize(width: g.collapsedSize.width + 2 * LiveLayout.extra, height: g.collapsedSize.height)
-        let pill = ClaudeLiveView(model: claude, notch: state)
+        let pill = LiveView(model: activity, notch: state)
             .frame(width: size.width, height: size.height)
             .background(UnevenRoundedRectangle(bottomLeadingRadius: 9, bottomTrailingRadius: 9, style: .continuous)
                 .fill(light ? Color(white: 0.96, opacity: 0.94) : Color(white: 0.17, opacity: 0.94)))
@@ -122,6 +128,24 @@ enum Preview {
             pr(61, "Reduce hover cost with core animation", "raj/notch-hub", "raj", .pending, ago: 400),
         ]
         return GitHubSnapshot(login: "raj", reviewRequested: review, mine: mine, fetchedAt: now)
+    }
+
+    /// Invented builds, so a render never shows a real pipeline.
+    private static func sampleJenkins() -> JenkinsSnapshot {
+        let now = Date()
+        func job(_ full: String, _ state: BuildState, number: Int, startedAgo: TimeInterval, finishedAgo: TimeInterval? = nil) -> JenkinsJob {
+            JenkinsJob(fullName: full, url: URL(string: "https://ci.acme.dev/job/\(full)/")!, state: state, buildNumber: number,
+                       startedAt: now.addingTimeInterval(-startedAgo), finishedAt: finishedAgo.map { now.addingTimeInterval(-$0) })
+        }
+        return JenkinsSnapshot(jobs: [
+            job("payments/deploy-prod", .running(progress: 0.62), number: 318, startedAgo: 140),
+            job("web/e2e-tests", .running(progress: 0.18), number: 902, startedAgo: 45),
+            job("payments/integration", .failed, number: 211, startedAgo: 5_400, finishedAgo: 5_100),
+            job("infra/terraform-plan", .unstable, number: 77, startedAgo: 12_000, finishedAgo: 11_800),
+            job("web/build", .succeeded, number: 1_204, startedAgo: 2_000, finishedAgo: 1_900),
+            job("payments/build", .succeeded, number: 560, startedAgo: 9_000, finishedAgo: 8_800),
+            job("mobile/release", .succeeded, number: 33, startedAgo: 40_000, finishedAgo: 39_500),
+        ], fetchedAt: now)
     }
 
     private static func sampleClaude() -> ClaudeSnapshot {

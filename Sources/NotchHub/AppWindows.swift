@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import GitHubKit
+import JenkinsKit
 import SwiftUI
 
 // MARK: - Shared pieces
@@ -107,15 +108,37 @@ struct SettingsView: View {
     @StateObject private var permissions = PermissionsModel()
     let showWelcome: () -> Void
 
-    private var githubStatus: String {
-        if GitHubToken.stored() != nil { return "Using the token saved in your Keychain" }
-        if settings.githubUsesCommandLine, GitHubToken.fromCommandLine() != nil { return "Using your GitHub CLI login" }
-        return "Not connected"
+    @State private var githubStatus = "Checking…"
+    @State private var hasGitHubToken = false
+
+    /// Looks at the Keychain and runs `gh`, both of which can be slow, so never inside `body`.
+    private func loadGitHubStatus() {
+        let useCommandLine = settings.githubUsesCommandLine
+        Task.detached {
+            let saved = GitHubToken.stored() != nil
+            let status: String
+            if saved { status = "Using the token saved in your Keychain" }
+            else if useCommandLine, GitHubToken.fromCommandLine() != nil { status = "Using your GitHub CLI login" }
+            else { status = "Not connected" }
+            await MainActor.run { githubStatus = status; hasGitHubToken = saved }
+        }
     }
 
     var body: some View {
+        TabView {
+            general.tabItem { Label("General", systemImage: "gearshape") }
+            integrations.tabItem { Label("Integrations", systemImage: "puzzlepiece.extension") }
+            permissionsTab.tabItem { Label("Permissions", systemImage: "lock.shield") }
+        }
+        .frame(width: 540, height: 500)
+        .onAppear { permissions.startPolling(); loadGitHubStatus() }
+        .onChange(of: settings.githubUsesCommandLine) { loadGitHubStatus() }
+        .onDisappear { permissions.stopPolling() }
+    }
+
+    private var general: some View {
         Form {
-            Section("General") {
+            Section("Notch") {
                 Toggle("Open at login", isOn: Binding(get: { settings.launchesAtLogin },
                                                       set: { settings.setLaunchesAtLogin($0) }))
                 VStack(alignment: .leading, spacing: 4) {
@@ -139,36 +162,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Integrations") {
-                Toggle("Claude Code activity", isOn: $settings.showClaudeActivity)
-                Text("Reads Claude Code's local session files to show when it is working and how many tokens it used today. Nothing leaves your Mac.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle("GitHub pull requests", isOn: $settings.showGitHub)
-                if settings.showGitHub {
-                    Toggle("Use my GitHub CLI login when no token is saved", isOn: $settings.githubUsesCommandLine)
-                    HStack {
-                        Text(githubStatus).font(.caption).foregroundStyle(.secondary)
-                        Spacer()
-                        if GitHubToken.stored() != nil {
-                            Button("Remove saved token") {
-                                GitHubToken.clear()
-                                settings.objectWillChange.send()
-                            }.controlSize(.small)
-                        }
-                    }
-                    Text("Connect from the GitHub chip in the notch, where you can paste a token.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-
-            Section("Permissions") {
-                ForEach(PermissionKind.allCases) { kind in
-                    PermissionRow(kind: kind, state: permissions.states[kind] ?? .notGranted) {
-                        Permissions.request(kind)
-                    }
-                }
-            }
-
             Section {
                 HStack {
                     Text("Notch Hub \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")")
@@ -179,9 +172,123 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 820)
-        .onAppear { permissions.startPolling() }
-        .onDisappear { permissions.stopPolling() }
+    }
+
+    private var integrations: some View {
+        Form {
+            Section("Claude Code") {
+                Toggle("Show activity in the notch", isOn: $settings.showClaudeActivity)
+                Text("Reads Claude Code's local session files to show when it is working and how many tokens it used today. Nothing leaves your Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("GitHub") {
+                Toggle("Show pull requests", isOn: $settings.showGitHub)
+                if settings.showGitHub {
+                    Toggle("Use my GitHub CLI login when no token is saved", isOn: $settings.githubUsesCommandLine)
+                    HStack {
+                        Text(githubStatus).font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        if hasGitHubToken {
+                            Button("Remove saved token") {
+                                GitHubToken.clear()
+                                hasGitHubToken = false
+                                settings.objectWillChange.send()
+                                loadGitHubStatus()
+                            }.controlSize(.small)
+                        }
+                    }
+                    Text("Connect from the GitHub chip in the notch, where you can paste a token.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Section("Jenkins") {
+                Toggle("Show builds", isOn: $settings.showJenkins)
+                if settings.showJenkins { JenkinsSettings(settings: settings) }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var permissionsTab: some View {
+        Form {
+            Section {
+                ForEach(PermissionKind.allCases) { kind in
+                    PermissionRow(kind: kind, state: permissions.states[kind] ?? .notGranted) {
+                        Permissions.request(kind)
+                    }
+                }
+            } footer: {
+                Text("macOS asks for these once. Notch Hub never records your screen or sends anything off your Mac.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// MARK: - Jenkins
+
+/// Address, username and token, with a button that checks them against the server right now.
+private struct JenkinsSettings: View {
+    @ObservedObject var settings: AppSettings
+    @State private var token = ""
+    @State private var hasToken = false
+    @State private var testing = false
+    @State private var result: (ok: Bool, text: String)?
+
+    var body: some View {
+        content
+            .onAppear { Task.detached { let saved = JenkinsToken.stored() != nil; await MainActor.run { hasToken = saved } } }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Address", text: $settings.jenkinsURL, prompt: Text("https://jenkins.example.com"))
+                .textContentType(.URL)
+            TextField("Username", text: $settings.jenkinsUser)
+            HStack {
+                SecureField("API token", text: $token, prompt: Text(hasToken ? "Saved in your Keychain" : "Create one under your Jenkins user, Configure"))
+                Button("Save") {
+                    JenkinsToken.save(token.trimmingCharacters(in: .whitespacesAndNewlines))
+                    token = ""
+                    hasToken = true
+                    settings.objectWillChange.send()      // makes the running monitor pick it up
+                }
+                .disabled(token.trimmingCharacters(in: .whitespaces).isEmpty)
+                if hasToken {
+                    Button("Remove") { JenkinsToken.clear(); hasToken = false; settings.objectWillChange.send() }
+                }
+            }
+            TextField("Only these jobs (optional)", text: $settings.jenkinsFilter, prompt: Text("deploy, payments"))
+            HStack {
+                Button(testing ? "Testing…" : "Test connection", action: test).disabled(testing)
+                if let result {
+                    Label(result.text, systemImage: result.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(result.ok ? .green : .orange).font(.caption)
+                }
+            }
+            Text("If your server is behind a VPN, connect to it yourself. Notch Hub shows \"offline\" until you do, then recovers on its own.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func test() {
+        let (address, user, filter) = (settings.jenkinsURL, settings.jenkinsUser, settings.jenkinsFilter)
+        testing = true
+        Task {
+            let config = await Task.detached { JenkinsModel.config(address: address, user: user, filter: filter) }.value
+            guard let config else {
+                result = (false, "Fill in the address and username, and save a token")
+                testing = false
+                return
+            }
+            do {
+                let snapshot = try await JenkinsClient().fetch(config)
+                result = (true, "Connected: \(snapshot.jobs.count) job\(snapshot.jobs.count == 1 ? "" : "s"), \(snapshot.running.count) running")
+            } catch {
+                result = (false, (error as? JenkinsError)?.message ?? error.localizedDescription)
+            }
+            testing = false
+        }
     }
 }
 

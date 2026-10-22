@@ -15,7 +15,19 @@ final class GitHubIntegration: NotchIntegration {
 
     var isEnabled: Bool { settings.showGitHub }
 
-    func start() { model.start(useCommandLine: settings.githubUsesCommandLine) }
+    private var startedWithCommandLine: Bool?
+
+    func start() {
+        startedWithCommandLine = settings.githubUsesCommandLine
+        model.start(useCommandLine: settings.githubUsesCommandLine)
+    }
+
+    /// Switching the command line fallback on or off needs a fresh start to pick a new token source.
+    func settingsChanged() {
+        guard startedWithCommandLine != settings.githubUsesCommandLine else { return }
+        model.stop()
+        start()
+    }
     func stop() { model.stop() }
     func refresh() { model.refresh() }
 

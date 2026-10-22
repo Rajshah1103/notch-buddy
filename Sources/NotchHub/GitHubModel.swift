@@ -16,7 +16,6 @@ final class GitHubModel: ObservableObject {
         monitor.onChange = { [weak self] state in
             MainActor.assumeIsolated { self?.apply(state) }
         }
-        source = GitHubToken.resolve(allowCommandLine: useCommandLine)?.source
         monitor.start()
     }
 
@@ -45,10 +44,9 @@ final class GitHubModel: ObservableObject {
         switch state {
         case .idle: break
         case .needsToken: needsToken = true; error = nil; snapshot = nil
-        case .ready(let new): needsToken = false; error = nil; snapshot = new
+        case .ready(let new, let tokenSource): needsToken = false; error = nil; snapshot = new; source = tokenSource
         case .failed(let failure): needsToken = false; error = failure
         }
-        source = GitHubToken.resolve(allowCommandLine: monitor.allowCommandLine)?.source
     }
 
     /// For the snapshot tool.

@@ -58,6 +58,11 @@ final class AppSettings: ObservableObject {
     @Published var showGitHub: Bool { didSet { defaults.set(showGitHub, forKey: "showGitHub"); changed() } }
     /// Fall back to the GitHub command line tool's login when no token has been pasted.
     @Published var githubUsesCommandLine: Bool { didSet { defaults.set(githubUsesCommandLine, forKey: "githubUsesCommandLine"); changed() } }
+    @Published var showJenkins: Bool { didSet { defaults.set(showJenkins, forKey: "showJenkins"); changed() } }
+    @Published var jenkinsURL: String { didSet { defaults.set(jenkinsURL, forKey: "jenkinsURL"); changed() } }
+    @Published var jenkinsUser: String { didSet { defaults.set(jenkinsUser, forKey: "jenkinsUser"); changed() } }
+    /// Comma-separated; only jobs whose name contains one of these are shown. Empty shows all.
+    @Published var jenkinsFilter: String { didSet { defaults.set(jenkinsFilter, forKey: "jenkinsFilter"); changed() } }
     @Published var searchHotKey: HotKeyBinding { didSet {
         if let data = try? JSONEncoder().encode(searchHotKey) { defaults.set(data, forKey: "searchHotKey") }
         changed()
@@ -76,6 +81,10 @@ final class AppSettings: ObservableObject {
         showClaudeActivity = defaults.object(forKey: "showClaudeActivity") as? Bool ?? true
         showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
         githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true
+        showJenkins = defaults.bool(forKey: "showJenkins")
+        jenkinsURL = defaults.string(forKey: "jenkinsURL") ?? ""
+        jenkinsUser = defaults.string(forKey: "jenkinsUser") ?? ""
+        jenkinsFilter = defaults.string(forKey: "jenkinsFilter") ?? ""
         searchHotKey = (defaults.data(forKey: "searchHotKey").flatMap { try? JSONDecoder().decode(HotKeyBinding.self, from: $0) }) ?? .default
     }
 

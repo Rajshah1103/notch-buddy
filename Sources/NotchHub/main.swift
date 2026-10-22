@@ -1,6 +1,7 @@
 import AppKit
 import ClaudeUsage
 import GitHubKit
+import JenkinsKit
 import WindowEngine
 
 // `NotchHub --dump` prints what the window engine sees and exits (handy for debugging).
@@ -119,6 +120,13 @@ if CommandLine.arguments.contains("--github") {
     exit(0)
 }
 
+// `NotchHub --jenkins-save-token T` / `--jenkins-clear-token`: manage the Keychain item from the
+// same signed binary the app uses, so the app can read it without a prompt. Used for testing.
+if let flag = CommandLine.arguments.firstIndex(of: "--jenkins-save-token"), flag + 1 < CommandLine.arguments.count {
+    JenkinsToken.save(CommandLine.arguments[flag + 1]); print("saved"); exit(0)
+}
+if CommandLine.arguments.contains("--jenkins-clear-token") { JenkinsToken.clear(); print("cleared"); exit(0) }
+
 // `NotchHub --tabs` reports how many browser windows and tabs the scripting bridge can see.
 if CommandLine.arguments.contains("--tabs") {
     let provider = BrowserTabsProvider()
@@ -156,7 +164,8 @@ if let flag = CommandLine.arguments.firstIndex(of: "--snapshot"), flag + 1 < Com
         Preview.render(to: args[flag + 1], demo: args.contains("--demo"), app: app, light: args.contains("--light"),
                        search: args.firstIndex(of: "--search").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil },
                        claudePanel: args.contains("--claude-panel"), githubPanel: args.contains("--github-panel"),
-                       githubConnect: args.contains("--github-connect"), live: args.contains("--live"))
+                       githubConnect: args.contains("--github-connect"), jenkinsPanel: args.contains("--jenkins-panel"),
+                       live: args.contains("--live"), liveBuild: args.contains("--live-build"))
     }
     exit(0)
 }

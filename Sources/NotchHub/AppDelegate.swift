@@ -9,9 +9,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windows = WindowsModel()
     private let claude = ClaudeModel()
     private let github = GitHubModel()
+    private let jenkins = JenkinsModel()
+    private lazy var live = LiveActivityModel(claude: claude, jenkins: jenkins)
     private lazy var hub = IntegrationHub(integrations: [
         ClaudeIntegration(model: claude),
         GitHubIntegration(model: github),
+        JenkinsIntegration(model: jenkins),
     ])
     private let settings = AppSettings.shared
     private let presenter = WindowPresenter()
@@ -24,22 +27,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         let model = windows
-        let claudeModel = claude
+        let liveModel = live
         let hub = hub
         notch = NotchManager(
             expandedSize: CGSize(width: 1000, height: 440),
             onPrefetch: { model.refresh(previews: false) },
             onExpand: { model.refresh(previews: true); hub.refresh() },
             content: { state in AnyView(SwitcherView(model: model, hub: hub, notch: state)) },
-            liveContent: { state in AnyView(ClaudeLiveView(model: claudeModel, notch: state)) }
+            liveContent: { state in AnyView(LiveView(model: liveModel, notch: state)) }
         )
         PerfProbe.startStallWatchdog()
 
         // While Claude Code works, the collapsed notch widens into a live activity.
-        claude.onWorkingChange = { [weak self] working in
-            PerfProbe.log("claude working = \(working)")
-            self?.notch?.setLive(extra: working ? LiveLayout.extra : nil)
+        live.onActiveChange = { [weak self] active in
+            PerfProbe.log("live activity = \(active)")
+            self?.notch?.setLive(extra: active ? LiveLayout.extra : nil)
         }
+        AppActions.openSettings = { [weak self] in self?.showSettings() }
         model.startTrackingRecents()
         notch?.start()
         model.refresh(previews: false)

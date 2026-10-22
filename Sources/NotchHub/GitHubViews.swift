@@ -13,7 +13,7 @@ struct GitHubChip: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: "arrow.triangle.pull").font(.system(size: 10, weight: .bold))
-                Text("GitHub").font(.system(size: 11, weight: .medium))
+                if isOpen { Text("GitHub").font(.system(size: 11, weight: .medium)) }
                 if let snapshot = model.snapshot {
                     Text("\(snapshot.reviewRequested.count)")
                         .font(.system(size: 11).monospacedDigit()).foregroundStyle(Theme.textSecondary)
@@ -34,6 +34,7 @@ struct GitHubChip: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .help("GitHub pull requests")
         .accessibilityLabel(accessibilitySummary)
         .accessibilityHint("Shows pull requests waiting for your review and the state of yours")
     }

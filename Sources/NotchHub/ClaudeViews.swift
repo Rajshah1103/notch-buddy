@@ -7,53 +7,6 @@ extension Theme {
     static let claude = Color(red: 0.85, green: 0.47, blue: 0.34)    // #D97757
 }
 
-enum LiveLayout {
-    /// How far the collapsed notch widens on each side while Claude is working.
-    static let extra: CGFloat = 72
-}
-
-/// What shows in the ears beside the collapsed notch while Claude works: a pulsing mark on the
-/// left, how long it has been going on the right.
-struct ClaudeLiveView: View {
-    @ObservedObject var model: ClaudeModel
-    let notch: NotchState
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        let g = notch.geometry
-        HStack(spacing: 0) {
-            Image(systemName: "sparkle")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Theme.claude)
-                .symbolEffect(.pulse, options: .repeating, isActive: model.snapshot.isWorking && !reduceMotion)
-                .frame(width: LiveLayout.extra)
-
-            Color.clear.frame(width: g.collapsedSize.width)
-
-            Group {
-                if model.snapshot.working.count > 1 {
-                    Text("×\(model.snapshot.working.count)")
-                } else if let since = model.snapshot.workingSince {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(Self.clock(context.date.timeIntervalSince(since)))
-                    }
-                }
-            }
-            .font(.system(size: 11, weight: .medium).monospacedDigit())
-            .foregroundStyle(Theme.textSecondary)
-            .frame(width: LiveLayout.extra)
-        }
-        .frame(width: g.collapsedSize.width + 2 * LiveLayout.extra, height: g.collapsedSize.height)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Claude is working")
-    }
-
-    static func clock(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds))
-        return String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
-
 /// Status chip in the expanded header; click to open the sessions panel.
 struct ClaudeChip: View {
     @ObservedObject var model: ClaudeModel
@@ -65,11 +18,11 @@ struct ClaudeChip: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: "sparkle").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.claude)
-                Text(model.snapshot.isWorking ? "Claude working" : "Claude")
-                    .font(.system(size: 11, weight: .medium))
+                if isOpen { Text("Claude").font(.system(size: 11, weight: .medium)) }
                 Text(TokenFormat.short(model.snapshot.tokensToday))
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
+                if model.snapshot.isWorking { Circle().fill(Theme.claude).frame(width: 6, height: 6) }
             }
             .foregroundStyle(isOpen ? Theme.textPrimary : Theme.textSecondary)
             .padding(.horizontal, 9)
@@ -79,6 +32,7 @@ struct ClaudeChip: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .help("Claude Code")
         .accessibilityLabel("Claude usage, \(model.snapshot.isWorking ? "working now" : "idle"), \(TokenFormat.short(model.snapshot.tokensToday)) tokens today")
         .accessibilityHint("Shows Claude Code sessions and tokens used today")
     }

@@ -20,10 +20,17 @@ protocol NotchIntegration: AnyObject {
     /// The notch is opening; refresh if the data is old.
     func refresh()
 
+    /// A setting changed while this is running (for example an address or token). Default: nothing.
+    func settingsChanged()
+
     func chip(isOpen: Bool, action: @escaping () -> Void) -> AnyView
     /// `notch` lets a panel close the notch (rows that open something elsewhere) or ask for the
     /// keyboard (`setTyping`) when it has a text field.
     func panel(notch: NotchState) -> AnyView
+}
+
+extension NotchIntegration {
+    func settingsChanged() {}
 }
 
 /// The set of integrations, kept in step with Settings.
@@ -55,6 +62,8 @@ final class IntegrationHub: ObservableObject {
             } else if !integration.isEnabled, running.contains(integration.id) {
                 running.remove(integration.id)
                 integration.stop()
+            } else if integration.isEnabled {
+                integration.settingsChanged()
             }
         }
         objectWillChange.send()
