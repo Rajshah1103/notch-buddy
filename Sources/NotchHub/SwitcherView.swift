@@ -13,6 +13,8 @@ struct SwitcherView: View {
     let notch: NotchState
 
     @State private var selectedID: Int32?
+    @State private var resetWork: DispatchWorkItem?
+    @State private var pendingReset = false
     /// Only the preview pane observes this, so moving across rows does not re-render the list.
     @StateObject private var hover = HoverStore()
     /// Hit testing for hover: see PointerHover.swift.
@@ -61,8 +63,19 @@ struct SwitcherView: View {
         .coordinateSpace(name: "notch")
         .onAppear { notch.pointerHandler = { [pointer] in pointer.pointerMoved($0) } }
         .onReceive(notch.$isExpanded) { expanded in
-            // Start each visit from the default: the app you are in, nothing hovered.
-            if !expanded { selectedID = nil; hover.entry = nil; openIntegration = nil }
+            // Start each visit from the default: the app you are in, nothing hovered. The reset waits
+            // until the content has faded out, because laying the pane out again while the notch is
+            // closing drops a frame. Reopening early does the pending reset first.
+            resetWork?.cancel()
+            let reset = { selectedID = nil; hover.entry = nil; openIntegration = nil }
+            if expanded {
+                if pendingReset { reset(); pendingReset = false }
+            } else {
+                pendingReset = true
+                let work = DispatchWorkItem { reset(); pendingReset = false }
+                resetWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+            }
         }
         .onReceive(notch.$isSearching) { isSearching in
             searching = isSearching

@@ -201,10 +201,13 @@ final class WindowsModel: ObservableObject {
         switch entry.target {
         case .window(let window, let space):
             let provider = provider
-            Task { await provider.focus(window, in: space) }
+            PerfProbe.log("perform: focus window")
+            Task { await provider.focus(window, in: space); PerfProbe.log("focus finished") }
         case .tab(let tab, let bundleID):
+            PerfProbe.log("perform: activate tab")
             browserProvider.activate(tab, bundleID: bundleID)
         case .launch(let app):
+            PerfProbe.log("perform: open app")
             provider.open(app)
         }
     }
