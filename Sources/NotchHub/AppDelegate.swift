@@ -14,11 +14,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let model = windows
         notch = NotchManager(
-            expandedSize: CGSize(width: 780, height: 230),
-            onExpand: { model.refresh() },
-            content: { _ in AnyView(WindowsView(model: model)) }
+            expandedSize: CGSize(width: 1000, height: 300),
+            onPrefetch: { model.refresh() },
+            onExpand: { model.refresh(force: true) },
+            content: { state in AnyView(WindowsView(model: model, notch: state)) }
         )
         notch?.start()
+        model.refresh(force: true)
         setUpStatusItem()
     }
 
