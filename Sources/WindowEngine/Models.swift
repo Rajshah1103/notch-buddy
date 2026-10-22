@@ -46,7 +46,7 @@ public struct AppRecord: Identifiable, Hashable {
     }
 }
 
-public struct Snapshot {
+public struct Snapshot: Equatable {
     public var spaces: [SpaceInfo]
     public var minimized: [WindowRecord]
     public var windowlessApps: [AppRecord]

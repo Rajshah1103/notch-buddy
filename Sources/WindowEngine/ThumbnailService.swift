@@ -1,42 +1,46 @@
 import CoreGraphics
 import ScreenCaptureKit
 
-/// Live window previews via ScreenCaptureKit. Needs Screen Recording; without it every call
-/// returns only what is already cached, so callers fall back to icons.
+/// Live window previews via ScreenCaptureKit. Needs Screen Recording; without it nothing is captured
+/// and callers fall back to icons. macOS can only capture windows on the current Space.
 public actor ThumbnailService {
-    private var cache: [UInt32: (image: CGImage, taken: Date)] = [:]
-    private let freshFor: TimeInterval = 3
+    private var lastCapture: [UInt32: Date] = [:]
+    private var shareable: (windows: [CGWindowID: SCWindow], taken: Date)?
+
+    private let freshFor: TimeInterval = 4
+    private let shareableFor: TimeInterval = 5
 
     public init() {}
 
-    public func cached() -> [UInt32: CGImage] {
-        cache.mapValues(\.image)
-    }
+    /// Captures windows in `ids` that have no recent capture. Returns only the new images.
+    public func capture(_ ids: [UInt32], maxWidth: Int = 360) async -> [UInt32: CGImage] {
+        guard CGPreflightScreenCaptureAccess() else { return [:] }
+        let stale = ids.filter { Date().timeIntervalSince(lastCapture[$0] ?? .distantPast) > freshFor }
+        guard !stale.isEmpty, let windows = await windowIndex() else { return [:] }
 
-    /// Captures any window in `ids` whose cached image is stale and returns everything cached.
-    public func refresh(_ ids: [UInt32], maxWidth: Int = 360) async -> [UInt32: CGImage] {
-        guard CGPreflightScreenCaptureAccess() else { return cached() }
-        let stale = ids.filter { id in
-            guard let entry = cache[id] else { return true }
-            return Date().timeIntervalSince(entry.taken) > freshFor
-        }
-        guard !stale.isEmpty,
-              let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-        else { return cached() }
-
-        let windows = Dictionary(content.windows.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
+        var captured: [UInt32: CGImage] = [:]
         for id in stale {
+            lastCapture[id] = Date()   // also throttles windows that fail to capture
             guard let window = windows[id], window.frame.width > 0, window.frame.height > 0 else { continue }
             let config = SCStreamConfiguration()
-            let scale = CGFloat(maxWidth) / window.frame.width
             config.width = maxWidth
-            config.height = max(1, Int(window.frame.height * scale))
+            config.height = max(1, Int(window.frame.height * CGFloat(maxWidth) / window.frame.width))
             config.showsCursor = false
             let filter = SCContentFilter(desktopIndependentWindow: window)
             if let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) {
-                cache[id] = (image, Date())
+                captured[id] = image
             }
         }
-        return cached()
+        return captured
+    }
+
+    /// Listing shareable windows is the expensive part of a capture, so reuse it briefly.
+    private func windowIndex() async -> [CGWindowID: SCWindow]? {
+        if let shareable, Date().timeIntervalSince(shareable.taken) < shareableFor { return shareable.windows }
+        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+        else { return nil }
+        let index = Dictionary(content.windows.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
+        shareable = (index, Date())
+        return index
     }
 }
