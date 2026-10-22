@@ -13,6 +13,14 @@ Grant these once from the menu bar item or the hint at the bottom of the notch:
 Accessibility (jump to windows), Automation (read browser tabs), Screen Recording (live previews and
 Chrome profile names). Requires macOS 14+. The build is ad-hoc signed, so macOS asks again after a rebuild.
 
+## Packaging
+
+    ./scripts/dmg.sh                         build/NotchHub.dmg, unsigned (Gatekeeper will warn downloaders)
+    DEVELOPER_ID="Developer ID Application: Name (TEAMID)" ./scripts/dmg.sh
+                                             signed with the hardened runtime
+    ... NOTARY_PROFILE=name ./scripts/dmg.sh signed, notarized and stapled (profile from
+                                             `xcrun notarytool store-credentials`)
+
 ## Using it
 
 - **Hover the notch**: the app row shows your running apps, most recent first. Hover an app to list its
@@ -21,6 +29,10 @@ Chrome profile names). Requires macOS 14+. The build is ad-hoc signed, so macOS 
   Return jumps, Esc closes.
 - **Chips** (top left of the open notch): Claude Code sessions and tokens used today; GitHub review
   requests and the check state of your pull requests (connect with a token, or it uses your `gh` login).
+- **Jenkins**: turn it on in Settings, add the address, username and API token, and press Test
+  connection. Running builds show a progress bar; a running build also shows as a ring beside the
+  collapsed notch when Claude is idle. On a VPN, connect it yourself: Notch Hub shows "offline" and
+  recovers on its own.
 - **Settings** (menu bar icon): hover delay, search shortcut, integrations, permissions.
 
 ## Layout
@@ -29,6 +41,7 @@ Chrome profile names). Requires macOS 14+. The build is ad-hoc signed, so macOS 
   APIs live.
 - `Sources/ClaudeUsage`: live Claude Code activity and token counts from its local transcripts.
 - `Sources/GitHubKit`: pull requests and check state from GitHub's GraphQL API, token handling.
+- `Sources/JenkinsKit`: job state and live progress from Jenkins' JSON API, offline backoff.
 - `Sources/NotchCore`: notch panel, outline animation, hover and keyboard focus. Knows nothing about windows.
 - `Sources/NotchHub`: the app, wires the modules together.
 

@@ -28,5 +28,13 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-codesign --force --sign - "$app"
+# Signing: with DEVELOPER_ID set (for example "Developer ID Application: Name (TEAMID)") the app is signed
+# with the hardened runtime, which notarization requires. Otherwise it is ad-hoc signed, which is enough
+# to run locally but makes macOS ask for permissions again after every rebuild.
+if [[ -n "${DEVELOPER_ID:-}" ]]; then
+    codesign --force --options runtime --timestamp --entitlements scripts/NotchHub.entitlements --sign "$DEVELOPER_ID" "$app"
+    echo "Signed with: $DEVELOPER_ID"
+else
+    codesign --force --sign - "$app"
+fi
 echo "Built $app"

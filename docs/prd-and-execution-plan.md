@@ -17,11 +17,11 @@ Items marked **[my call]** are my defaults, not Raj's decisions. Items marked **
 | M3 Search + hotkey (Control-Option-Space, keyboard control) | Done |
 | M4 Browser tabs | Done, via AppleScript (Chromium browsers) instead of the planned extension; Safari/Firefox not supported |
 | M5 Integration framework + GitHub | Done: `NotchIntegration` protocol and hub (Claude and GitHub use it); GitHub shows review requests and your PRs with check state. Actions run progress is shown only as the PR check state |
-| M6 Jenkins | Not started |
+| M6 Jenkins | Done and tested against a mock server (auth, folders, filters, live progress, offline and recovery). Not yet run against a real server |
 | M7 Claude usage | Done: live ears while working, sessions panel, tokens today. Plan limits are not stored locally, so not shown |
 | M8 Slack + Gmail (multi-account) | Not started |
 | M9 Design polish | In progress: adaptive system material, light and dark |
-| M10 Commercial (licensing, updates, notarization) | Not started; needs Developer ID. Settings window and first-run welcome are done |
+| M10 Commercial (licensing, updates, notarization) | Packaging script (`scripts/dmg.sh`) with signing and notarization hooks is done; needs a Developer ID to use. Licensing and auto-update not started. Settings window and first-run welcome are done |
 | M11 Calls | Not started |
 
 Findings that changed the design: macOS "Spaces" include one Space per full-screen app, so Desktops and
