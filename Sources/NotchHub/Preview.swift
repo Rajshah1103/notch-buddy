@@ -10,13 +10,16 @@ import WindowEngine
 /// can be checked without screen-recording permission. `--demo` fills in sample window titles.
 @MainActor
 enum Preview {
-    static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?,
+    static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?, manyApps: Int = 0,
                        claudePanel: Bool = false, githubPanel: Bool = false, githubConnect: Bool = false,
                        jenkinsPanel: Bool = false, live: Bool = false, liveBuild: Bool = false) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
         if demo { snapshot = withSampleTitles(snapshot) }
+        for n in 0..<manyApps {      // invented apps, to see how the app row copes with a crowd
+            snapshot.windowlessApps.append(AppRecord(pid: Int32(900_000 + n), name: "App \(n + 1)", bundleURL: nil))
+        }
 
         let size = CGSize(width: 1000, height: 440)
         guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return }
@@ -44,6 +47,13 @@ enum Preview {
                                                 JenkinsIntegration(model: jenkins)])
         PreviewSeed.integration = claudePanel ? "claude" : githubPanel ? "github" : jenkinsPanel ? "jenkins" : nil
         let model = WindowsModel()
+        for n in 0..<manyApps {
+            let symbols = ["safari", "message", "music.note", "photo", "calendar", "envelope", "map", "doc.text", "gearshape", "terminal"]
+            let config = NSImage.SymbolConfiguration(pointSize: 28, weight: .regular)
+            if let image = NSImage(systemSymbolName: symbols[n % symbols.count], accessibilityDescription: nil)?.withSymbolConfiguration(config) {
+                model.setPreviewIcon(image, for: Int32(900_000 + n))
+            }
+        }
         model.loadForPreview(snapshot, browsers: demo ? sampleBrowsers(snapshot) : [:], frontApp: app)
 
         if live || liveBuild { renderLive(to: path, activity: LiveActivityModel(claude: claude, jenkins: jenkins), state: state, light: light); return }

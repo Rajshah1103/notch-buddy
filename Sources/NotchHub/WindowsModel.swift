@@ -207,6 +207,9 @@ final class WindowsModel: ObservableObject {
         provider.switchTo(space)
     }
 
+    /// For the snapshot tool: an icon for an invented app.
+    func setPreviewIcon(_ image: NSImage, for pid: Int32) { icons[pid] = image }
+
     /// For the snapshot tool: load data directly.
     func loadForPreview(_ snapshot: Snapshot, browsers: [String: [BrowserWindow]], frontApp: String?) {
         capturesThumbnails = false

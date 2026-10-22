@@ -163,6 +163,7 @@ if let flag = CommandLine.arguments.firstIndex(of: "--snapshot"), flag + 1 < Com
         let app = args.firstIndex(of: "--app").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
         Preview.render(to: args[flag + 1], demo: args.contains("--demo"), app: app, light: args.contains("--light"),
                        search: args.firstIndex(of: "--search").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil },
+                       manyApps: args.firstIndex(of: "--many-apps").flatMap { $0 + 1 < args.count ? Int(args[$0 + 1]) : nil } ?? 0,
                        claudePanel: args.contains("--claude-panel"), githubPanel: args.contains("--github-panel"),
                        githubConnect: args.contains("--github-connect"), jenkinsPanel: args.contains("--jenkins-panel"),
                        live: args.contains("--live"), liveBuild: args.contains("--live-build"))

@@ -45,7 +45,7 @@ struct SwitcherView: View {
                 integration.panel(notch: notch).padding(.top, 10)
             } else {
                 AppDock(groups: model.groups, icons: model.icons, selectedID: selected?.id,
-                        onSelect: { selectedID = $0 }, onOpen: open)
+                        onSelect: { selectedID = $0 }, onOpen: open, onSearch: { notch.setSearching(true) })
                     .padding(.top, 6)
                 if let group = selected {
                     Detail(model: model, group: group, hover: hover, onOpen: open)
@@ -155,16 +155,43 @@ private struct AppDock: View {
     let selectedID: Int32?
     let onSelect: (Int32) -> Void
     let onOpen: (Entry) -> Void
+    let onSearch: () -> Void
+
+    private let fullSlot: CGFloat = 60       // icon tile plus gap at normal size
+    private let smallestSlot: CGFloat = 36   // below this icons stop being recognisable
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(groups) { group in
-                DockItem(group: group, icon: icons[group.pid], isSelected: group.id == selectedID,
-                         onHover: { onSelect(group.id) },
-                         onOpen: { if let entry = group.primary { onOpen(entry) } })
+        GeometryReader { proxy in
+            // Everything must fit on one row without scrolling: shrink the icons first, and only when even
+            // the smallest no longer fits, show as many as will and hand the rest to search.
+            let capacity = max(1, Int(proxy.size.width / smallestSlot))
+            let overflow = groups.count > capacity
+            let shown = overflow ? Array(groups.prefix(capacity - 1)) : groups
+            let slots = shown.count + (overflow ? 1 : 0)
+            let slot = min(fullSlot, proxy.size.width / CGFloat(max(slots, 1)))
+            HStack(spacing: 0) {
+                ForEach(shown) { group in
+                    DockItem(group: group, icon: icons[group.pid], isSelected: group.id == selectedID, slot: slot,
+                             onHover: { onSelect(group.id) },
+                             onOpen: { if let entry = group.primary { onOpen(entry) } })
+                }
+                if overflow {
+                    Button(action: onSearch) {
+                        Text("+\(groups.count - shown.count)")
+                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(width: slot, height: slot)
+                            .background(RoundedRectangle(cornerRadius: slot * 0.28, style: .continuous).fill(Theme.fillQuiet))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressStyle())
+                    .accessibilityLabel("\(groups.count - shown.count) more apps")
+                    .accessibilityHint("Opens search")
+                }
             }
+            .frame(width: proxy.size.width)
         }
-        .frame(maxWidth: .infinity)
+        .frame(height: 54)
     }
 }
 
@@ -172,36 +199,41 @@ private struct DockItem: View {
     let group: AppGroup
     let icon: NSImage?
     let isSelected: Bool
+    let slot: CGFloat
     let onHover: () -> Void
     let onOpen: () -> Void
 
     var body: some View {
+        // At full size (slot 60) the icon is 38 points in a 54-point tile; it scales down with the slot.
+        let tile = slot * 0.9
+        let iconSize = tile * 0.70
         Button(action: onOpen) {
             ZStack(alignment: .topTrailing) {
                 Group {
                     if let icon { Image(nsImage: icon).resizable().interpolation(.high) } else { Color.clear }
                 }
-                .frame(width: 38, height: 38)
-                .frame(width: 54, height: 54)
+                .frame(width: iconSize, height: iconSize)
+                .frame(width: tile, height: tile)
 
                 if group.entries.count > 1 {
                     Text("\(group.entries.count)")
-                        .font(.system(size: 10, weight: .bold).monospacedDigit())
+                        .font(.system(size: slot < 46 ? 9 : 10, weight: .bold).monospacedDigit())
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .frame(minWidth: 17, minHeight: 17)
+                        .padding(.horizontal, 4)
+                        .frame(minWidth: 16, minHeight: 16)
                         .background(Capsule().fill(Theme.accent))
                         .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                         .offset(x: 2, y: 2)
                 }
             }
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: tile * 0.3, style: .continuous)
                     .fill(isSelected ? Theme.fillSelected : Color.clear)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
+        .frame(width: slot)
         .pointerHover { if $0 { onHover() } }
         .accessibilityLabel(group.name)
         .accessibilityHint("Open \(group.name)")
