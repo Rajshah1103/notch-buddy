@@ -43,6 +43,12 @@ public struct Entry: Identifiable, Hashable {
     /// System window whose live preview represents this entry, when there is one.
     public let thumbnailWindowID: UInt32?
     public let target: EntryTarget
+
+    /// "github.com" for a tab's address; empty for windows.
+    public var host: String {
+        guard !url.isEmpty, let host = URL(string: url)?.host else { return "" }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
 }
 
 /// A running app and everything inside it that can be jumped to.

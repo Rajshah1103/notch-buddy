@@ -86,3 +86,43 @@ struct PlaceAndProfileTests {
         #expect(groups[1].entries[0].place.label == "Desktop 2")
     }
 }
+
+struct SearchTests {
+    private func tab(_ id: Int, _ title: String, _ url: String, active: Bool = false) -> Entry {
+        let t = BrowserTab(windowID: 1, index: id, title: title, url: url, isActive: active)
+        return Entry(id: "t\(id)", title: title, subtitle: t.host, detail: "", url: url,
+                     place: EntryPlace(kind: .fullScreen, isCurrent: false), section: nil, isActive: active,
+                     thumbnailWindowID: nil, target: .tab(t, bundleID: "com.google.Chrome"))
+    }
+
+    private var groups: [AppGroup] {
+        [AppGroup(pid: 1, name: "Google Chrome", bundleID: "com.google.Chrome", entries: [
+            tab(1, "Pull request #482 · api-gateway", "https://github.com/acme/api/pull/482"),
+            tab(2, "Inbox (12)", "https://mail.google.com/mail/u/0/", active: true),
+            tab(3, "Jenkins · deploy-prod #318", "https://jenkins.acme.dev/job/deploy-prod/318"),
+            tab(4, "Grafana · p99 latency", "https://grafana.acme.dev/d/latency")])]
+    }
+
+    private func titles(_ query: String) -> [String] { Search.results(for: query, in: groups).map(\.entry.title) }
+
+    @Test func findsByTitleHostAndApp() {
+        #expect(titles("jenkins") == ["Jenkins · deploy-prod #318"])
+        #expect(titles("github").first == "Pull request #482 · api-gateway")
+        #expect(titles("chrome").count == 4)
+    }
+
+    @Test func everyTermMustMatch() {
+        #expect(titles("pull 482").count == 1)
+        #expect(titles("pull zzz").isEmpty)
+    }
+
+    @Test func toleratesTyposThroughSubsequence() {
+        #expect(titles("grfn").first == "Grafana · p99 latency")
+    }
+
+    @Test func wordStartsBeatBuriedMatches() {
+        let list = [AppGroup(pid: 3, name: "X", bundleID: nil, entries: [
+            tab(1, "Bandwidth report", "https://a.com"), tab(2, "Dashboard", "https://b.com")])]
+        #expect(Search.results(for: "dash", in: list).first?.entry.title == "Dashboard")
+    }
+}
