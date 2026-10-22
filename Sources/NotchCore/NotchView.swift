@@ -13,57 +13,63 @@ public final class NotchState: ObservableObject {
     }
 }
 
-/// Black shape with a flat top and rounded bottom corners, like the hardware notch.
+/// Black shape that flares outward at the top so it melts into the screen edge, with rounded
+/// bottom corners, like the Dynamic Island.
+///
+/// It animates by interpolating its own outline between the collapsed and expanded sizes, so the
+/// animation redraws a path instead of re-running SwiftUI layout for everything inside the notch.
 struct NotchShape: Shape {
-    var bottomRadius: CGFloat
+    var progress: CGFloat
+    let collapsed: CGSize
+    let expanded: CGSize
 
     var animatableData: CGFloat {
-        get { bottomRadius }
-        set { bottomRadius = newValue }
+        get { progress }
+        set { progress = newValue }
     }
 
+    private func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * progress }
+
     func path(in rect: CGRect) -> Path {
+        let w = lerp(collapsed.width, expanded.width)
+        let h = lerp(collapsed.height, expanded.height)
+        let frame = CGRect(x: rect.midX - w / 2, y: rect.minY, width: w, height: h)
+        let t = min(lerp(0, 12), h / 2, w / 4)
+        let b = min(lerp(9, 28), h / 2, w / 4)
+
         var path = Path()
-        let r = min(bottomRadius, rect.height / 2, rect.width / 2)
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
-        path.addArc(center: CGPoint(x: rect.maxX - r, y: rect.maxY - r), radius: r,
+        path.move(to: CGPoint(x: frame.minX, y: frame.minY))
+        path.addLine(to: CGPoint(x: frame.maxX, y: frame.minY))
+        path.addQuadCurve(to: CGPoint(x: frame.maxX - t, y: frame.minY + t),
+                          control: CGPoint(x: frame.maxX - t, y: frame.minY))
+        path.addLine(to: CGPoint(x: frame.maxX - t, y: frame.maxY - b))
+        path.addArc(center: CGPoint(x: frame.maxX - t - b, y: frame.maxY - b), radius: b,
                     startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
-        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.maxY - r), radius: r,
+        path.addLine(to: CGPoint(x: frame.minX + t + b, y: frame.maxY))
+        path.addArc(center: CGPoint(x: frame.minX + t + b, y: frame.maxY - b), radius: b,
                     startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        path.addLine(to: CGPoint(x: frame.minX + t, y: frame.minY + t))
+        path.addQuadCurve(to: CGPoint(x: frame.minX, y: frame.minY),
+                          control: CGPoint(x: frame.minX + t, y: frame.minY))
         path.closeSubpath()
         return path
     }
 }
 
-struct NotchShell<Content: View>: View {
+/// The animated black backdrop. Only this view animates in SwiftUI; the content above it is
+/// faded by Core Animation (see NotchController), so opening costs almost nothing per frame.
+struct NotchBackdrop: View {
     @ObservedObject var state: NotchState
-    let content: Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let g = state.geometry
-        let size = state.isExpanded ? g.expandedSize : g.collapsedSize
-
-        ZStack(alignment: .top) {
-            NotchShape(bottomRadius: state.isExpanded ? 24 : 8)
-                .fill(.black)
-                .frame(width: size.width, height: size.height)
-
-            if state.isExpanded {
-                content
-                    .frame(width: g.expandedSize.width, height: g.expandedSize.height)
-                    .transition(reduceMotion
-                        ? .opacity
-                        : .opacity.combined(with: .scale(scale: 0.94, anchor: .top)))
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(reduceMotion
-                   ? .easeInOut(duration: 0.15)
-                   : .spring(response: 0.32, dampingFraction: 0.82),
-                   value: state.isExpanded)
+        NotchShape(progress: state.isExpanded ? 1 : 0, collapsed: g.collapsedSize, expanded: g.expandedSize)
+            .fill(.black)
+            .animation(reduceMotion
+                       ? .easeInOut(duration: 0.15)
+                       : .spring(response: 0.32, dampingFraction: 0.82),
+                       value: state.isExpanded)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }

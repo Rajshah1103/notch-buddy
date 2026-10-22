@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 private final class NotchPanel: NSPanel {
@@ -10,8 +11,16 @@ private final class NotchPanel: NSPanel {
 private final class NotchController {
     let state: NotchState
     private let panel: NotchPanel
+    private let contentHost: NSView
     private var collapseWork: DispatchWorkItem?
     private var wasInPrefetchZone = false
+    private var intentWork: DispatchWorkItem?
+    /// Called after the notch opens from hover.
+    var onExpanded: (() -> Void)?
+
+    /// The pointer must rest on the notch this long before it opens, so brushing past it on the way
+    /// to menu bar icons does nothing. Short enough not to be felt.
+    private let intentDelay: TimeInterval = 0.06
 
     /// How long the pointer may stray outside the open notch before it collapses.
     private let collapseDelay: TimeInterval = 0.25
@@ -30,9 +39,27 @@ private final class NotchController {
         panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
 
-        let hosting = NSHostingView(rootView: NotchShell(state: state, content: content(state)))
-        hosting.frame = NSRect(origin: .zero, size: geometry.panelFrame.size)
-        panel.contentView = hosting
+        let bounds = NSRect(origin: .zero, size: geometry.panelFrame.size)
+        let container = NSView(frame: bounds)
+        container.wantsLayer = true
+
+        let backdrop = NSHostingView(rootView: NotchBackdrop(state: state))
+        backdrop.frame = bounds
+        backdrop.autoresizingMask = [.width, .height]
+
+        let body = content(state)
+            .frame(width: geometry.expandedSize.width, height: geometry.expandedSize.height, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        contentHost = NSHostingView(rootView: body)
+        contentHost.frame = bounds
+        contentHost.autoresizingMask = [.width, .height]
+        contentHost.wantsLayer = true
+        contentHost.layer?.opacity = 0
+        contentHost.isHidden = true
+
+        container.addSubview(backdrop)
+        container.addSubview(contentHost)
+        panel.contentView = container
         panel.orderFrontRegardless()
         state.collapseHandler = { [weak self] in self?.collapse() }
     }
@@ -61,8 +88,18 @@ private final class NotchController {
             return false
         }
         if g.triggerFrame.contains(point) {
-            setExpanded(true)
-            return true
+            if intentWork == nil {
+                let work = DispatchWorkItem { [weak self] in
+                    self?.intentWork = nil
+                    self?.setExpanded(true)
+                    self?.onExpanded?()
+                }
+                intentWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + intentDelay, execute: work)
+            }
+        } else {
+            intentWork?.cancel()
+            intentWork = nil
         }
         return false
     }
@@ -73,6 +110,53 @@ private final class NotchController {
         guard state.isExpanded != expanded else { return }
         panel.ignoresMouseEvents = !expanded
         state.isExpanded = expanded
+        animateContent(expanded: expanded)
+    }
+
+    /// Fades (and nudges) the content with Core Animation: no SwiftUI work per frame, and starting
+    /// from the layer's current on-screen value keeps it smooth if the pointer flicks in and out.
+    private func animateContent(expanded: Bool) {
+        guard let layer = contentHost.layer else { return }
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let current = layer.presentation()
+        let fromOpacity = current?.opacity ?? layer.opacity
+        let fromTransform = current?.transform ?? layer.transform
+
+        let toOpacity: Float = expanded ? 1 : 0
+        let toTransform = (expanded || reduceMotion) ? CATransform3DIdentity : CATransform3DMakeTranslation(0, 8, 0)
+
+        if expanded { contentHost.isHidden = false }
+        layer.removeAllAnimations()
+
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self] in
+            guard let self, !self.state.isExpanded else { return }
+            self.contentHost.isHidden = true
+        }
+        layer.opacity = toOpacity
+        layer.transform = toTransform
+
+        // Strong ease-out in, quicker ease-out away: leaving should never feel like waiting.
+        let timing = expanded ? CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+                              : CAMediaTimingFunction(name: .easeOut)
+        let duration: CFTimeInterval = expanded ? 0.22 : 0.1
+        let delay: CFTimeInterval = expanded ? 0.04 : 0   // lets the shape lead
+
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = fromOpacity
+        fade.toValue = toOpacity
+        let move = CABasicAnimation(keyPath: "transform")
+        move.fromValue = fromTransform
+        move.toValue = toTransform
+        for animation in [fade, move] {
+            animation.duration = reduceMotion ? 0.15 : duration
+            animation.timingFunction = timing
+            animation.beginTime = CACurrentMediaTime() + delay
+            animation.fillMode = .backwards
+        }
+        layer.add(fade, forKey: "fade")
+        layer.add(move, forKey: "move")
+        CATransaction.commit()
     }
 
     func collapse() { setExpanded(false) }
@@ -120,20 +204,20 @@ public final class NotchManager {
     }
 
     private func rebuild() {
-        controllers = NSScreen.screens.map {
-            NotchController(screen: $0, expandedSize: expandedSize, content: content)
+        controllers = NSScreen.screens.map { screen in
+            let controller = NotchController(screen: screen, expandedSize: expandedSize, content: content)
+            controller.onExpanded = { [weak self] in self?.onExpand() }
+            return controller
         }
     }
 
     private func handleMouseMoved() {
         let point = NSEvent.mouseLocation
-        var expanded = false
         var prefetch = false
         for controller in controllers {
             if controller.enteredPrefetchZone(point) { prefetch = true }
-            if controller.mouseMoved(to: point) { expanded = true }
+            _ = controller.mouseMoved(to: point)
         }
         if prefetch { onPrefetch() }
-        if expanded { onExpand() }
     }
 }
