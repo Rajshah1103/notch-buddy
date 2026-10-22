@@ -38,6 +38,11 @@ PLIST
 if [[ -n "${DEVELOPER_ID:-}" ]]; then
     codesign --force --options runtime --timestamp --entitlements scripts/NotchHub.entitlements --sign "$DEVELOPER_ID" "$app"
     echo "Signed with: $DEVELOPER_ID"
+elif security find-identity -v -p codesigning 2>/dev/null | grep -q "Notch Hub Local"; then
+    # A local certificate (see README) gives every build the same identity, so macOS keeps remembering
+    # the permissions you granted instead of treating each rebuild as a new app.
+    codesign --force --sign "Notch Hub Local" "$app"
+    echo "Signed with: Notch Hub Local"
 else
     codesign --force --sign - "$app"
 fi

@@ -19,6 +19,15 @@ Accessibility (jump to windows), Automation (read browser tabs), Screen Recordin
 Chrome profile names). Requires macOS 14+. Local builds are ad-hoc signed, so macOS may ask for the permissions again after a rebuild;
 a Developer ID signature (see Packaging) makes them stick.
 
+## Keeping permissions across rebuilds
+
+macOS ties permissions to the app's code signature. An ad-hoc signature changes with every build, so
+permissions are forgotten. `scripts/bundle.sh` signs with a local certificate named "Notch Hub Local"
+when one exists in your login keychain (the build then has the same identity every time). To create it:
+make a self-signed certificate with the Code Signing extended key usage, import it, and trust it for code
+signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Developer ID, set
+`DEVELOPER_ID` instead.
+
 ## Packaging
 
     ./scripts/dmg.sh                         build/NotchHub.dmg, unsigned (Gatekeeper will warn downloaders)
