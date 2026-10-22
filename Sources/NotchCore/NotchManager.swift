@@ -27,8 +27,8 @@ private final class NotchController {
     var onExpanded: (() -> Void)?
 
     /// The pointer must rest on the notch this long before it opens, so brushing past it on the way
-    /// to menu bar icons does nothing. Short enough not to be felt.
-    private let intentDelay: TimeInterval = 0.06
+    /// to menu bar icons does nothing. Set by the manager (a user setting); 0 opens immediately.
+    var intentDelay: TimeInterval = 0.06
 
     /// How long the pointer may stray outside the open notch before it collapses.
     private let collapseDelay: TimeInterval = 0.25
@@ -147,7 +147,9 @@ private final class NotchController {
                     self?.onExpanded?()
                 }
                 intentWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + intentDelay, execute: work)
+                if intentDelay <= 0 { work.perform() } else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + intentDelay, execute: work)
+                }
             }
         } else {
             intentWork?.cancel()
@@ -298,6 +300,11 @@ public final class NotchManager {
     private let onPrefetch: () -> Void
     private var controllers: [NotchController] = []
     private var liveExtraWidth: CGFloat = 0
+
+    /// Seconds the pointer must rest on the notch before it opens (0 = immediately).
+    public var hoverDelay: TimeInterval = 0.06 {
+        didSet { controllers.forEach { $0.intentDelay = hoverDelay } }
+    }
     private var globalMonitor: Any?
     private var localMonitor: Any?
 
@@ -357,6 +364,7 @@ public final class NotchManager {
             let controller = NotchController(screen: screen, expandedSize: expandedSize, content: content, live: liveContent)
             controller.onExpanded = { [weak self] in self?.onExpand() }
             controller.setLive(extra: liveExtraWidth)
+            controller.intentDelay = hoverDelay
             return controller
         }
     }
