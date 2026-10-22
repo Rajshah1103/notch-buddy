@@ -15,6 +15,13 @@ if CommandLine.arguments.contains("--dump") {
     exit(0)
 }
 
+if let flag = CommandLine.arguments.firstIndex(of: "--snapshot"), flag + 1 < CommandLine.arguments.count {
+    MainActor.assumeIsolated {
+        Preview.render(to: CommandLine.arguments[flag + 1], demo: CommandLine.arguments.contains("--demo"))
+    }
+    exit(0)
+}
+
 let app = NSApplication.shared
 let delegate = MainActor.assumeIsolated { AppDelegate() }
 app.delegate = delegate
