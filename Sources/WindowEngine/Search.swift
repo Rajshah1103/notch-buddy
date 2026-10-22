@@ -19,7 +19,9 @@ public extension Entry {
 /// Typing finds anything open: every term must match, and matches at the start of the title or of
 /// a word rank above matches buried in the middle.
 public enum Search {
-    public static func results(for query: String, in groups: [AppGroup], limit: Int = .max) -> [SearchResult] {
+    /// `boost` adds to a result's score (used to rank what you open often higher); it defaults to nothing.
+    public static func results(for query: String, in groups: [AppGroup], limit: Int = .max,
+                               boost: (Entry, String) -> Double = { _, _ in 0 }) -> [SearchResult] {
         let terms = fold(query).split(separator: " ").map(String.init)
 
         var scored: [(result: SearchResult, score: Double, order: Int)] = []
@@ -28,12 +30,13 @@ public enum Search {
             for entry in group.entries {
                 defer { order += 1 }
                 let result = SearchResult(entry: entry, appName: group.name, appPID: group.pid)
+                let learned = boost(entry, group.name)
                 if terms.isEmpty {
-                    // Nothing typed: show what you are likely to want, in recency order.
-                    scored.append((result, entry.isActive ? 1 : 0, order))
+                    // Nothing typed: what you open often first, then recency order.
+                    scored.append((result, (entry.isActive ? 1 : 0) + learned, order))
                     continue
                 }
-                if let score = score(terms, entry: entry, appName: group.name) { scored.append((result, score, order)) }
+                if let score = score(terms, entry: entry, appName: group.name) { scored.append((result, score + learned, order)) }
             }
         }
         // Higher score first; ties keep recency order (apps are already most-recent-first).

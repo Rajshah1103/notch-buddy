@@ -31,6 +31,9 @@ public enum EntryTarget: Hashable {
 
 /// One thing you can jump to: a window, a browser tab, or an app with no window to open.
 public struct Entry: Identifiable, Hashable {
+    /// Windows and tabs can be closed from here; an app with no window to open cannot.
+    public var isClosable: Bool { if case .launch = target { false } else { true } }
+
     public let id: String
     public let title: String
     public let subtitle: String
@@ -61,6 +64,12 @@ public struct AppGroup: Identifiable, Hashable {
 
     /// What clicking the app's icon opens: the active tab or front window.
     public var primary: Entry? { entries.first(where: \.isActive) ?? entries.first }
+    /// The group without the given entries, or nil if nothing is left.
+    public func removingEntries(_ ids: Set<String>) -> AppGroup? {
+        let kept = entries.filter { !ids.contains($0.id) }
+        return kept.isEmpty ? nil : AppGroup(pid: pid, name: name, bundleID: bundleID, entries: kept)
+    }
+
     public var isBrowserWithTabs: Bool { entries.contains { if case .tab = $0.target { true } else { false } } }
 }
 

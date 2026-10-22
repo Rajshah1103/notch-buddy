@@ -118,6 +118,18 @@ public final class SystemWindowProvider {
         if let app { bringToFront(app) }
     }
 
+    /// Closes a window by pressing its close button, as clicking it would (the app may ask about unsaved
+    /// work). Only possible for windows Accessibility can reach, which means those on the current Space.
+    @discardableResult
+    public func close(_ window: WindowRecord) -> Bool {
+        guard AXIsProcessTrusted(),
+              let element = axWindows(pid: window.pid).first(where: { windowID(of: $0) == window.id }),
+              let button = axValue(element, kAXCloseButtonAttribute)
+        else { return false }
+        // swiftlint:disable:next force_cast
+        return AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString) == .success
+    }
+
     /// Opens (or reopens) an app that has no window, like clicking its Dock icon.
     public func open(_ app: AppRecord) {
         guard let running = NSRunningApplication(processIdentifier: app.pid) else { return }

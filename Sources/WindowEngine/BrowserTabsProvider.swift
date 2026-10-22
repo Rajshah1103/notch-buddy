@@ -34,6 +34,21 @@ public final class BrowserTabsProvider {
         queue.async { _ = Self.execute(source) }
     }
 
+    /// Closes one tab. The tab's address is checked first, so if the list on screen is out of date (tabs
+    /// were opened or closed since) the wrong tab is never closed.
+    public func close(_ tab: BrowserTab, bundleID: String) {
+        let url = tab.url.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let source = """
+        tell application id "\(bundleID)"
+            try
+                set w to window id \(tab.windowID)
+                if (URL of tab \(tab.index) of w) is "\(url)" then close tab \(tab.index) of w
+            end try
+        end tell
+        """
+        queue.async { _ = Self.execute(source) }
+    }
+
     private func run(_ source: String) async -> Result<String, BrowserError> {
         await withCheckedContinuation { continuation in
             queue.async { continuation.resume(returning: Self.execute(source)) }
