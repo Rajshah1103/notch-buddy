@@ -86,15 +86,23 @@ public final class SystemWindowProvider {
         let app = NSRunningApplication(processIdentifier: window.pid)
         if app?.isHidden == true { app?.unhide() }
 
-        if let space, !space.isCurrent {
+        let switchedSpace = space.map { !$0.isCurrent } ?? false
+        if let space, switchedSpace {
             CGSManagedDisplaySetCurrentSpace(CGSMainConnectionID(), space.displayID as CFString, space.id)
-            try? await Task.sleep(nanoseconds: 250_000_000)
         }
 
-        if AXIsProcessTrusted(),
-           let element = axWindows(pid: window.pid).first(where: { windowID(of: $0) == window.id }) {
-            AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
-            AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+        if AXIsProcessTrusted() {
+            // Windows on another Space only become reachable once that Space is current,
+            // so poll briefly instead of waiting a fixed time.
+            let attempts = switchedSpace ? 20 : 1
+            for attempt in 0..<attempts {
+                if let element = axWindows(pid: window.pid).first(where: { windowID(of: $0) == window.id }) {
+                    AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+                    AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+                    break
+                }
+                if attempt < attempts - 1 { try? await Task.sleep(nanoseconds: 15_000_000) }
+            }
         }
         app?.activate()
     }
