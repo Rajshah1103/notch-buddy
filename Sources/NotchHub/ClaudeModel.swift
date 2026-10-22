@@ -17,6 +17,13 @@ final class ClaudeModel: ObservableObject {
         monitor.start()
     }
 
+    /// Turned off in Settings: stop watching and clear the live activity.
+    func stop() {
+        monitor.stop()
+        monitor.onChange = nil
+        apply(.idle)
+    }
+
     private func apply(_ new: ClaudeSnapshot) {
         let wasWorking = snapshot.isWorking
         snapshot = new

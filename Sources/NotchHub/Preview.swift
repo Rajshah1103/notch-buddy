@@ -55,6 +55,26 @@ enum Preview {
         print("Wrote \(path)")
     }
 
+    /// Renders the Settings or Welcome window content offscreen.
+    static func renderWindow(_ name: String, to path: String, light: Bool) {
+        _ = NSApplication.shared
+        let content: AnyView = name == "welcome"
+            ? AnyView(WelcomeView(onDone: {}))
+            : AnyView(SettingsView(settings: AppSettings.shared, showWelcome: {}))
+        let host = NSHostingView(rootView: content
+            .background(Color(nsColor: .windowBackgroundColor))
+            .environment(\.colorScheme, light ? .light : .dark))
+        let size = host.fittingSize
+        host.frame = NSRect(origin: .zero, size: size)
+        host.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        print("Wrote \(path) (\(Int(size.width))x\(Int(size.height)))")
+    }
+
     /// The collapsed notch with Claude's live ears, drawn at 3x so the detail is visible.
     private static func renderLive(to path: String, claude: ClaudeModel, state: NotchState, light: Bool) {
         let g = state.geometry

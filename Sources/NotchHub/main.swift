@@ -118,6 +118,15 @@ if CommandLine.arguments.contains("--tabs") {
     exit(0)
 }
 
+// `NotchHub --window settings|welcome out.png [--light]` renders those windows offscreen.
+if let flag = CommandLine.arguments.firstIndex(of: "--window"), flag + 2 < CommandLine.arguments.count {
+    MainActor.assumeIsolated {
+        Preview.renderWindow(CommandLine.arguments[flag + 1], to: CommandLine.arguments[flag + 2],
+                             light: CommandLine.arguments.contains("--light"))
+    }
+    exit(0)
+}
+
 if let flag = CommandLine.arguments.firstIndex(of: "--snapshot"), flag + 1 < CommandLine.arguments.count {
     MainActor.assumeIsolated {
         let args = CommandLine.arguments

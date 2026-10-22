@@ -1,17 +1,20 @@
 import AppKit
-import ClaudeUsage
 import Carbon.HIToolbox
-import ServiceManagement
-import SwiftUI
+import ClaudeUsage
 import NotchCore
+import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windows = WindowsModel()
     private let claude = ClaudeModel()
+    private let settings = AppSettings.shared
+    private let presenter = WindowPresenter()
     private var notch: NotchManager?
     private var statusItem: NSStatusItem?
     private var searchHotKey: HotKey?
+    private var claudeRunning = false
+    private var registeredHotKey: HotKeyBinding?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -26,25 +29,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             liveContent: { state in AnyView(ClaudeLiveView(model: claudeModel, notch: state)) }
         )
         PerfProbe.startStallWatchdog()
+
         // While Claude Code works, the collapsed notch widens into a live activity.
         claude.onWorkingChange = { [weak self] working in
             PerfProbe.log("claude working = \(working)")
             self?.notch?.setLive(extra: working ? LiveLayout.extra : nil)
         }
-        claude.start()
         model.startTrackingRecents()
         notch?.start()
-
-        // Control-Option-Space opens search. Chosen because Spotlight, Raycast and Alfred
-        // all use Command or Option with Space.
-        searchHotKey = HotKey(keyCode: kVK_Space, modifiers: controlKey | optionKey) { [weak self] in
-            MainActor.assumeIsolated {
-                self?.windows.refresh(previews: true)
-                self?.notch?.toggleSearch()
-            }
-        }
         model.refresh(previews: false)
         setUpStatusItem()
+
+        // Settings drive the running app; apply them now and whenever they change.
+        settings.onChange = { [weak self] in self?.applySettings() }
+        applySettings()
+
+        if !settings.hasOnboarded {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.showWelcome() }
+        }
+    }
+
+    // MARK: - Settings
+
+    private func applySettings() {
+        notch?.hoverDelay = settings.hoverDelayMs / 1000
+
+        if settings.showClaudeActivity, !claudeRunning {
+            claudeRunning = true
+            claude.start()
+        } else if !settings.showClaudeActivity, claudeRunning {
+            claudeRunning = false
+            claude.stop()
+        }
+
+        // Re-register the search shortcut only when it changed (dropping the old one first).
+        if registeredHotKey != settings.searchHotKey {
+            registeredHotKey = settings.searchHotKey
+            searchHotKey = nil
+            searchHotKey = HotKey(keyCode: settings.searchHotKey.keyCode, modifiers: settings.searchHotKey.modifiers) { [weak self] in
+                MainActor.assumeIsolated { self?.openSearch() }
+            }
+        }
+    }
+
+    // MARK: - Windows
+
+    @objc private func showSettings() {
+        presenter.show("settings", title: "Notch Hub Settings") {
+            SettingsView(settings: settings) { [weak self] in self?.showWelcome() }
+        }
+    }
+
+    private func showWelcome() {
+        presenter.show("welcome", title: "Welcome to Notch Hub") {
+            WelcomeView { [weak self] in
+                self?.settings.hasOnboarded = true
+                self?.presenter.close("welcome")
+            }
+        }
     }
 
     // MARK: - Menu bar item
@@ -59,22 +101,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
     }
 
-    @objc private func toggleLaunchAtLogin() {
-        let service = SMAppService.mainApp
-        do {
-            if service.status == .enabled { try service.unregister() } else { try service.register() }
-        } catch {
-            NSLog("Launch at login failed: \(error)")
-        }
-    }
-
     @objc private func openSearch() {
         windows.refresh(previews: true)
         notch?.toggleSearch()
     }
 
-    @objc private func grantAccessibility() { Permissions.requestAccessibility() }
-    @objc private func grantScreenRecording() { Permissions.requestScreenRecording() }
     @objc private func quit() { NSApp.terminate(nil) }
 }
 
@@ -83,20 +114,17 @@ extension AppDelegate: NSMenuDelegate {
         menu.removeAllItems()
 
         let search = menu.addItem(withTitle: "Search…", action: #selector(openSearch), keyEquivalent: "")
-        search.toolTip = "Control-Option-Space"
-        menu.addItem(.separator())
-
-        let accessibility = menu.addItem(withTitle: "Accessibility (jump to windows)",
-                                         action: #selector(grantAccessibility), keyEquivalent: "")
-        accessibility.state = Permissions.accessibilityGranted ? .on : .off
-        let recording = menu.addItem(withTitle: "Screen Recording (window titles)",
-                                     action: #selector(grantScreenRecording), keyEquivalent: "")
-        recording.state = Permissions.screenRecordingGranted ? .on : .off
+        search.toolTip = settings.searchHotKey.display
 
         menu.addItem(.separator())
-        let login = menu.addItem(withTitle: "Launch at Login",
-                                 action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        // One line of status, only when something still needs attention.
+        let missing = PermissionKind.allCases.filter { Permissions.state(of: $0) == .notGranted }
+        if !missing.isEmpty {
+            let item = menu.addItem(withTitle: "\(missing.count) permission\(missing.count == 1 ? "" : "s") needed…",
+                                    action: #selector(showSettings), keyEquivalent: "")
+            item.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
+        }
+        menu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Notch Hub", action: #selector(quit), keyEquivalent: "q")
