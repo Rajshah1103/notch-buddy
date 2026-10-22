@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "NotchHub",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],
     targets: [
         // Spaces/windows/AX. The only place private macOS APIs live.
         .target(name: "WindowEngine"),
