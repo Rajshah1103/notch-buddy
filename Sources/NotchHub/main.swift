@@ -127,6 +127,24 @@ if let flag = CommandLine.arguments.firstIndex(of: "--jenkins-save-token"), flag
 }
 if CommandLine.arguments.contains("--jenkins-clear-token") { JenkinsToken.clear(); print("cleared"); exit(0) }
 
+// `NotchHub --close-test-tab` closes any tab whose address contains "localhost:8089/nhtest", through the
+// same code the notch uses. For testing only.
+if CommandLine.arguments.contains("--close-test-tab") {
+    let provider = BrowserTabsProvider()
+    let done = DispatchSemaphore(value: 0)
+    Task {
+        if case .success(let windows) = await provider.windows(bundleID: "com.google.Chrome") {
+            let targets = windows.flatMap(\.tabs).filter { $0.url.contains("localhost:8089/nhtest") }
+            print("found \(targets.count) test tab(s)")
+            for tab in targets.reversed() { provider.close(tab, bundleID: "com.google.Chrome"); try? await Task.sleep(nanoseconds: 300_000_000) }
+        }
+        done.signal()
+    }
+    done.wait()
+    Thread.sleep(forTimeInterval: 0.5)     // let the last script finish
+    exit(0)
+}
+
 // `NotchHub --tabs` reports how many browser windows and tabs the scripting bridge can see.
 if CommandLine.arguments.contains("--tabs") {
     let provider = BrowserTabsProvider()

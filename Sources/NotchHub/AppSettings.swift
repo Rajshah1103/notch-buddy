@@ -60,6 +60,8 @@ final class AppSettings: ObservableObject {
     @Published var searchEngine: SearchEngine { didSet { defaults.set(searchEngine.rawValue, forKey: "searchEngine"); changed() } }
     /// The browser profile last chosen for opening web searches (its folder name).
     @Published var webProfile: String? { didSet { defaults.set(webProfile, forKey: "webProfile") } }
+    /// Rank results you open often higher. Everything learned stays on this Mac.
+    @Published var learnFromUse: Bool { didSet { defaults.set(learnFromUse, forKey: "learnFromUse") } }
     @Published var showGitHub: Bool { didSet { defaults.set(showGitHub, forKey: "showGitHub"); changed() } }
     /// Fall back to the GitHub command line tool's login when no token has been pasted.
     @Published var githubUsesCommandLine: Bool { didSet { defaults.set(githubUsesCommandLine, forKey: "githubUsesCommandLine"); changed() } }
@@ -86,6 +88,7 @@ final class AppSettings: ObservableObject {
         showClaudeActivity = defaults.object(forKey: "showClaudeActivity") as? Bool ?? true
         searchEngine = SearchEngine(rawValue: defaults.string(forKey: "searchEngine") ?? "") ?? .google
         webProfile = defaults.string(forKey: "webProfile")
+        learnFromUse = defaults.object(forKey: "learnFromUse") as? Bool ?? true
         showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
         githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true
         showJenkins = defaults.bool(forKey: "showJenkins")

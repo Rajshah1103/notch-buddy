@@ -46,6 +46,12 @@ signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Devel
   for an address, last for words); its right-hand pane lists your Chrome profiles, so you click or use ← →
   to pick which one the new tab opens in. Command-Return always searches the web, even when something
   open matches. Chromium browsers only (Chrome, Brave, Edge); the search engine is a setting.
+- **It learns.** Results you pick often rise: choose a result for what you typed and it ranks higher next time
+  you type the same (or a longer or shorter version of it); things you open from the app row count too, and
+  old habits fade over a few weeks. It is all local, can be turned off, and can be wiped, in Settings.
+- **Close things.** Hover a tab or window and press its ✕, or select it in search and press ⌘W. A closed tab
+  disappears at once and the real list is read back a moment later, so a close that did not happen
+  (an app asked to save) reappears. Windows can only be closed when they are on the current Space.
 - **Chips** (top left of the open notch): Claude Code sessions and tokens used today; GitHub review
   requests and the check state of your pull requests (connect with a token, or it uses your `gh` login).
 - **Jenkins**: turn it on in Settings, add the address, username and API token, and press Test

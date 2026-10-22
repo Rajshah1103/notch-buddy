@@ -24,6 +24,8 @@ final class WindowsModel: ObservableObject {
     private let browserProvider = BrowserTabsProvider()
     private let thumbnailService = ThumbnailService()
     private var browserWindows: [String: [BrowserWindow]] = [:]
+    /// Entries just closed, hidden until the next real read confirms they are gone.
+    private var hiddenEntryIDs: Set<String> = []
     private var recents: [Int32] = []
     private var inFlight = false
     private var lastRefresh = Date.distantPast
@@ -114,9 +116,10 @@ final class WindowsModel: ObservableObject {
         for pid in pids {
             if let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier { bundleIDs[pid] = id }
         }
-        let rebuilt = AppGroupBuilder.build(
+        var rebuilt = AppGroupBuilder.build(
             snapshot: snapshot, browsers: browserWindows, bundleIDs: bundleIDs, recents: recents,
             frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier)
+        if !hiddenEntryIDs.isEmpty { rebuilt = rebuilt.compactMap { $0.removingEntries(hiddenEntryIDs) } }
         if rebuilt != groups { groups = rebuilt }
     }
 
@@ -141,11 +144,12 @@ final class WindowsModel: ObservableObject {
                 case .failure: break
                 }
             }
+            hiddenEntryIDs.removeAll()          // fresh data from the browser is the truth again
             if windows != browserWindows || denied != browsersNeedingAccess {
                 browserWindows = windows
                 browsersNeedingAccess = denied
-                rebuildGroups()
             }
+            rebuildGroups()
         }
     }
 
@@ -200,6 +204,28 @@ final class WindowsModel: ObservableObject {
             browserProvider.activate(tab, bundleID: bundleID)
         case .launch(let app):
             provider.open(app)
+        }
+    }
+
+    /// Closes a tab or window. The row disappears at once; a moment later the real list is read back, so a
+    /// close that did not happen (an app asked to save, or the window could not be reached) reappears.
+    func close(_ entry: Entry) {
+        switch entry.target {
+        case .tab(let tab, let bundleID):
+            browserProvider.close(tab, bundleID: bundleID)
+        case .window(let window, _):
+            guard provider.close(window) else { return }     // not reachable (another Space): nothing to hide
+        case .launch:
+            return
+        }
+        hiddenEntryIDs.insert(entry.id)
+        rebuildGroups()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            MainActor.assumeIsolated {
+                self.lastBrowserRefresh = .distantPast
+                self.lastRefresh = .distantPast
+                self.refresh(previews: false, force: true)
+            }
         }
     }
 

@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let claude = ClaudeModel()
     private let github = GitHubModel()
     private let web = WebBrowser()
+    private let learning = LearningStore()
     private let jenkins = JenkinsModel()
     private lazy var live = LiveActivityModel(claude: claude, jenkins: jenkins)
     private lazy var hub = IntegrationHub(integrations: [
@@ -31,11 +32,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let liveModel = live
         let hub = hub
         let web = web
+        let learning = learning
         notch = NotchManager(
             expandedSize: CGSize(width: 1000, height: 440),
             onPrefetch: { model.refresh(previews: false) },
             onExpand: { model.refresh(previews: true); hub.refresh() },
-            content: { state in AnyView(SwitcherView(model: model, hub: hub, web: web, notch: state)) },
+            content: { state in AnyView(SwitcherView(model: model, hub: hub, web: web, learning: learning, notch: state)) },
             liveContent: { state in AnyView(LiveView(model: liveModel, notch: state)) }
         )
         notch?.trace = { PerfProbe.log($0) }
@@ -83,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showSettings() {
         presenter.show("settings", title: "Notch Hub Settings") {
-            SettingsView(settings: settings) { [weak self] in self?.showWelcome() }
+            SettingsView(settings: settings, learning: learning) { [weak self] in self?.showWelcome() }
         }
     }
 

@@ -12,7 +12,9 @@ final class HoverHub: ObservableObject {
 
     private var frames: [UUID: CGRect] = [:]
     private var boxes: [UUID: Box] = [:]
-    private var current: UUID?
+    /// Everything the pointer is over right now. A row and a button inside it are both hovered, as with
+    /// native hover; leaving the button must not end the row's hover.
+    private var current: Set<UUID> = []
 
     func register(_ id: UUID, frame: CGRect, box: Box) {
         frames[id] = frame
@@ -22,21 +24,17 @@ final class HoverHub: ObservableObject {
     func unregister(_ id: UUID) {
         frames[id] = nil
         boxes[id] = nil
-        if current == id { current = nil }
+        current.remove(id)
     }
 
     /// `point` is in the open notch's coordinates, or nil when the pointer is outside it.
     func pointerMoved(_ point: CGPoint?) {
-        var hit: UUID?
-        if let point {
-            // The smallest frame wins, so a row inside a card is hovered rather than the card.
-            hit = frames.filter { $0.value.contains(point) }
-                .min { $0.value.width * $0.value.height < $1.value.width * $1.value.height }?.key
-        }
-        guard hit != current else { return }
-        if let old = current { boxes[old]?.action(false) }
-        current = hit
-        if let new = hit { boxes[new]?.action(true) }
+        let now: Set<UUID> = point.map { p in Set(frames.filter { $0.value.contains(p) }.keys) } ?? []
+        guard now != current else { return }
+        let left = current.subtracting(now), entered = now.subtracting(current)
+        current = now
+        for id in left { boxes[id]?.action(false) }
+        for id in entered { boxes[id]?.action(true) }
     }
 }
 

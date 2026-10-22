@@ -58,7 +58,7 @@ enum Preview {
 
         if live || liveBuild { renderLive(to: path, activity: LiveActivityModel(claude: claude, jenkins: jenkins), state: state, light: light); return }
 
-        let root = SwitcherView(model: model, hub: hub, web: web, notch: state)
+        let root = SwitcherView(model: model, hub: hub, web: web, learning: LearningStore(), notch: state)
             .frame(width: size.width, height: size.height)
             // Stand-in for the system material, which only exists inside a real window.
             .background(
@@ -89,7 +89,7 @@ enum Preview {
         AppSettings.shared.showJenkins = true      // off by default; the render shows its fields
         let content: AnyView = name == "welcome"
             ? AnyView(WelcomeView(onDone: {}))
-            : AnyView(SettingsView(settings: AppSettings.shared, showWelcome: {}))
+            : AnyView(SettingsView(settings: AppSettings.shared, learning: LearningStore(), showWelcome: {}))
         let host = NSHostingView(rootView: content
             .background(Color(nsColor: .windowBackgroundColor))
             .environment(\.colorScheme, light ? .light : .dark))

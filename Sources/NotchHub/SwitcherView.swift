@@ -9,6 +9,7 @@ struct SwitcherView: View {
     @ObservedObject var model: WindowsModel
     @ObservedObject var hub: IntegrationHub
     @ObservedObject var web: WebBrowser
+    @ObservedObject var learning: LearningStore
     let notch: NotchState
 
     @State private var selectedID: Int32?
@@ -33,8 +34,8 @@ struct SwitcherView: View {
         VStack(spacing: 0) {
             ears(notch.geometry)
             if searching {
-                SearchPanel(model: model, web: web, settings: .shared, query: $query, selection: $selection,
-                            focus: $fieldFocused, onOpen: open,
+                SearchPanel(model: model, web: web, learning: learning, settings: .shared, query: $query,
+                            selection: $selection, focus: $fieldFocused, onOpen: { open($0, query: query) },
                             onWeb: { action, profile in
                                 web.open(action.url, in: profile)
                                 notch.collapse()
@@ -45,10 +46,10 @@ struct SwitcherView: View {
                 integration.panel(notch: notch).padding(.top, 10)
             } else {
                 AppDock(groups: model.groups, icons: model.icons, selectedID: selected?.id,
-                        onSelect: { selectedID = $0 }, onOpen: open, onSearch: { notch.setSearching(true) })
+                        onSelect: { selectedID = $0 }, onOpen: { open($0) }, onSearch: { notch.setSearching(true) })
                     .padding(.top, 6)
                 if let group = selected {
-                    Detail(model: model, group: group, hover: hover, onOpen: open)
+                    Detail(model: model, group: group, hover: hover, onOpen: { open($0) })
                         .padding(.top, 10)
                 }
             }
@@ -76,7 +77,10 @@ struct SwitcherView: View {
         }
     }
 
-    private func open(_ entry: Entry) {
+    private func open(_ entry: Entry, query: String = "") {
+        if let group = model.groups.first(where: { $0.entries.contains(entry) }) {
+            learning.record(entry, appName: group.name, query: query)
+        }
         model.perform(entry)
         notch.collapse()
     }
@@ -288,6 +292,7 @@ private struct Detail: View {
                                 case .header(let text): SectionHeader(text: text)
                                 case .entry(let entry):
                                     EntryRow(entry: entry, icon: model.icons[group.pid],
+                                             onClose: entry.isClosable ? { model.close(entry) } : nil,
                                              onHover: { hover.entry = entry }, onOpen: { onOpen(entry) })
                                 }
                             }
@@ -364,10 +369,14 @@ private struct EntryRow: View {
     let entry: Entry
     let icon: NSImage?
     var isSelected = false
+    /// When set, a close button appears on hover or selection.
+    var onClose: (() -> Void)? = nil
     let onHover: () -> Void
     let onOpen: () -> Void
 
     @State private var isHovered = false
+
+    private var showsClose: Bool { onClose != nil && (isHovered || isSelected) }
 
     var body: some View {
         Button(action: onOpen) {
@@ -386,7 +395,7 @@ private struct EntryRow: View {
                     }
                 }
                 Spacer(minLength: 0)
-                if entry.isActive {
+                if entry.isActive && !showsClose {
                     // The tab or window currently in front.
                     Circle().fill(Theme.accent).frame(width: 6, height: 6)
                 }
@@ -400,12 +409,40 @@ private struct EntryRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
+        .overlay(alignment: .trailing) {
+            if showsClose, let onClose {
+                CloseButton(label: entry.title, action: onClose).padding(.trailing, 8)
+            }
+        }
         .pointerHover { hovering in
             isHovered = hovering
             if hovering { onHover() }
         }
         .accessibilityLabel(entry.title)
         .accessibilityHint("Switch to this \(entry.url.isEmpty ? "window" : "tab")")
+        .accessibilityAction(named: "Close") { onClose?() }
+    }
+}
+
+/// A small ✕ that closes the tab or window on its row.
+private struct CloseButton: View {
+    let label: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(hovering ? Theme.textPrimary : Theme.textSecondary)
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(hovering ? Theme.fillSelected : Theme.fillHover))
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressStyle())
+        .pointerHover { hovering = $0 }
+        .help("Close")
+        .accessibilityLabel("Close \(label)")
     }
 }
 
@@ -548,6 +585,7 @@ private struct SearchButton: View {
 private struct SearchPanel: View {
     @ObservedObject var model: WindowsModel
     @ObservedObject var web: WebBrowser
+    @ObservedObject var learning: LearningStore
     @ObservedObject var settings: AppSettings
     @Binding var query: String
     @Binding var selection: Int
@@ -578,7 +616,9 @@ private struct SearchPanel: View {
 
     var body: some View {
         let action = WebAction.classify(query, engine: settings.searchEngine)
-        let all = Search.results(for: query, in: model.groups)
+        let all = Search.results(for: query, in: model.groups) { entry, appName in
+            learning.boost(entry, appName: appName, query: query)
+        }
         let matches = Array(all.prefix(visibleRows - (action == nil ? 0 : 1))).map(Row.result)
         // A typed address goes first (you probably want to go there); plain words go last, after anything
         // you already have open that matches.
@@ -597,6 +637,7 @@ private struct SearchPanel: View {
                             case .result(let result):
                                 EntryRow(entry: result.entry.withSubtitle(subtitle(for: result)),
                                          icon: model.icons[result.appPID], isSelected: index == selection,
+                                         onClose: result.entry.isClosable ? { model.close(result.entry) } : nil,
                                          onHover: { selection = index }, onOpen: { onOpen(result.entry) })
                             case .web(let action):
                                 WebRow(action: action, browser: web.browserName, profile: activeProfile?.name,
@@ -612,8 +653,14 @@ private struct SearchPanel: View {
                                 .padding(.horizontal, 10)
                                 .frame(height: 24)
                         }
+                        if case .result(let selected)? = current, selected.entry.isClosable {
+                            Text("↩ open  ·  ⌘W close")
+                                .font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10).padding(.top, 4)
+                        }
                         if case .web = current, web.profiles.count > 1 {
-                            Text("← → choose a profile  ·  ⌘↩ always search the web")
+                            Text("← → choose a profile  ·  ⌘↩ search the web")
                                 .font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 10).padding(.top, 4)
@@ -660,6 +707,14 @@ private struct SearchPanel: View {
             case .web(let action)?: openWeb(action, activeProfile)
             case nil: break
             }
+            return .handled
+        }
+        .onKeyPress(keys: [KeyEquivalent("w")], phases: .down) { press in
+            // Command-W closes the selected tab or window, as it does everywhere on a Mac. (Command-Delete
+            // would be natural too, but the text field claims it to delete the line.)
+            guard press.modifiers.contains(.command), case .result(let result)? = current, result.entry.isClosable
+            else { return .ignored }
+            model.close(result.entry)
             return .handled
         }
         .onKeyPress(.escape) { onClose(); return .handled }

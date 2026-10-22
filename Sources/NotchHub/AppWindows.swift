@@ -146,6 +146,8 @@ struct ShortcutRecorder: View {
 
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
+    @ObservedObject var learning: LearningStore
+    @State private var forgotten = false
     @StateObject private var permissions = PermissionsModel()
     let showWelcome: () -> Void
 
@@ -206,6 +208,17 @@ struct SettingsView: View {
                 }
                 Text("Type a web address or any words into search to open them in a new browser tab. You choose the profile each time.")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("Learn from what I open", isOn: $settings.learnFromUse)
+                HStack {
+                    Text("Results you pick often rise to the top. This stays on your Mac.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button(forgotten ? "Forgotten" : "Forget what it learned") {
+                        learning.forgetEverything()
+                        forgotten = true
+                    }
+                    .controlSize(.small).disabled(forgotten || learning.isEmpty)
+                }
             }
 
             Section {
