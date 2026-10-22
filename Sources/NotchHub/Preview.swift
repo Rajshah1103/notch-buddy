@@ -89,7 +89,7 @@ enum Preview {
         AppSettings.shared.showJenkins = true      // off by default; the render shows its fields
         let content: AnyView = name == "welcome"
             ? AnyView(WelcomeView(onDone: {}))
-            : AnyView(SettingsView(settings: AppSettings.shared, learning: LearningStore(), showWelcome: {}))
+            : AnyView(SettingsView(settings: AppSettings.shared, learning: LearningStore(), showWelcome: {}, diagnostics: { "" }))
         let host = NSHostingView(rootView: content
             .background(Color(nsColor: .windowBackgroundColor))
             .environment(\.colorScheme, light ? .light : .dark))

@@ -120,6 +120,8 @@ final class WindowsModel: ObservableObject {
             snapshot: snapshot, browsers: browserWindows, bundleIDs: bundleIDs, recents: recents,
             frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier)
         if !hiddenEntryIDs.isEmpty { rebuilt = rebuilt.compactMap { $0.removingEntries(hiddenEntryIDs) } }
+        let hiddenApps = AppSettings.shared.hiddenApps
+        if !hiddenApps.isEmpty { rebuilt.removeAll { hiddenApps.contains($0.bundleID ?? $0.name) } }
         if rebuilt != groups { groups = rebuilt }
     }
 
@@ -228,6 +230,9 @@ final class WindowsModel: ObservableObject {
             }
         }
     }
+
+    /// Applies a change to which apps are hidden straight away.
+    func hiddenAppsChanged() { rebuildGroups() }
 
     func switchTo(_ space: SpaceInfo) {
         provider.switchTo(space)

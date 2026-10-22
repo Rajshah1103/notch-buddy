@@ -52,6 +52,8 @@ signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Devel
 - **Close things.** Hover a tab or window and press its ✕, or select it in search and press ⌘W. A closed tab
   disappears at once and the real list is read back a moment later, so a close that did not happen
   (an app asked to save) reappears. Windows can only be closed when they are on the current Space.
+- **Hide apps** you never want in the notch (a VPN client, System Settings): right-click one in the row.
+  Settings lists what is hidden and lets you bring it back.
 - **Chips** (top left of the open notch): Claude Code sessions and tokens used today; GitHub review
   requests and the check state of your pull requests (connect with a token, or it uses your `gh` login).
 - **Jenkins**: turn it on in Settings, add the address, username and API token, and press Test
@@ -80,6 +82,7 @@ signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Devel
     NotchHub --snapshot out.png --demo [--app "Google Chrome"] [--light] [--search dep] [--claude-panel] [--github-panel] [--github-connect] [--live]
                                              render the UI offscreen with invented data
     NotchHub --window settings|welcome out.png [--light]
+    NotchHub --diagnostics                   the text "Copy diagnostics" in Settings puts on the clipboard
     NOTCHHUB_PERF=1 NotchHub                 log main-thread stalls and slow background reads
 
 Tests use Swift Testing and need full Xcode to run (`swift test`).

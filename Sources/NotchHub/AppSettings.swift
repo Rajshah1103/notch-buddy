@@ -62,6 +62,8 @@ final class AppSettings: ObservableObject {
     @Published var webProfile: String? { didSet { defaults.set(webProfile, forKey: "webProfile") } }
     /// Rank results you open often higher. Everything learned stays on this Mac.
     @Published var learnFromUse: Bool { didSet { defaults.set(learnFromUse, forKey: "learnFromUse") } }
+    /// Apps (by bundle identifier, or name when there is none) that never appear in the notch.
+    @Published var hiddenApps: Set<String> { didSet { defaults.set(Array(hiddenApps), forKey: "hiddenApps"); changed() } }
     @Published var showGitHub: Bool { didSet { defaults.set(showGitHub, forKey: "showGitHub"); changed() } }
     /// Fall back to the GitHub command line tool's login when no token has been pasted.
     @Published var githubUsesCommandLine: Bool { didSet { defaults.set(githubUsesCommandLine, forKey: "githubUsesCommandLine"); changed() } }
@@ -89,6 +91,7 @@ final class AppSettings: ObservableObject {
         searchEngine = SearchEngine(rawValue: defaults.string(forKey: "searchEngine") ?? "") ?? .google
         webProfile = defaults.string(forKey: "webProfile")
         learnFromUse = defaults.object(forKey: "learnFromUse") as? Bool ?? true
+        hiddenApps = Set(defaults.stringArray(forKey: "hiddenApps") ?? [])
         showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
         githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true
         showJenkins = defaults.bool(forKey: "showJenkins")

@@ -150,6 +150,8 @@ struct SettingsView: View {
     @State private var forgotten = false
     @StateObject private var permissions = PermissionsModel()
     let showWelcome: () -> Void
+    let diagnostics: () -> String
+    @State private var copiedDiagnostics = false
 
     @State private var githubStatus = "Checking…"
     @State private var hasGitHubToken = false
@@ -221,12 +223,35 @@ struct SettingsView: View {
                 }
             }
 
+            if !settings.hiddenApps.isEmpty {
+                Section("Hidden apps") {
+                    ForEach(settings.hiddenApps.sorted(), id: \.self) { app in
+                        HStack {
+                            Text(app.split(separator: ".").last.map(String.init) ?? app)
+                            Spacer()
+                            Button("Show again") { settings.hiddenApps.remove(app) }.controlSize(.small)
+                        }
+                    }
+                    Text("Right-click an app in the notch to hide it.").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
             Section {
                 HStack {
                     Text("Notch Hub \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")")
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Show welcome again", action: showWelcome).controlSize(.small)
+                }
+                HStack {
+                    Text("For support: versions, permissions and counts. Nothing personal.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button(copiedDiagnostics ? "Copied" : "Copy diagnostics") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(diagnostics(), forType: .string)
+                        copiedDiagnostics = true
+                    }.controlSize(.small)
                 }
             }
         }

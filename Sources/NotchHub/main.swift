@@ -145,6 +145,17 @@ if CommandLine.arguments.contains("--close-test-tab") {
     exit(0)
 }
 
+// `NotchHub --diagnostics` prints the block "Copy diagnostics" puts on the clipboard.
+if CommandLine.arguments.contains("--diagnostics") {
+    MainActor.assumeIsolated {
+        _ = NSApplication.shared
+        let model = WindowsModel()
+        model.loadForPreview(SystemWindowProvider().snapshot(), browsers: [:], frontApp: nil)
+        print(Diagnostics.report(model: model, settings: AppSettings.shared))
+    }
+    exit(0)
+}
+
 // `NotchHub --tabs` reports how many browser windows and tabs the scripting bridge can see.
 if CommandLine.arguments.contains("--tabs") {
     let provider = BrowserTabsProvider()

@@ -70,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notch?.hoverDelay = settings.hoverDelayMs / 1000
 
         hub.apply()      // start or stop each integration to match Settings
+        windows.hiddenAppsChanged()
 
         // Re-register the search shortcut only when it changed (dropping the old one first).
         if registeredHotKey != settings.searchHotKey {
@@ -85,7 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showSettings() {
         presenter.show("settings", title: "Notch Hub Settings") {
-            SettingsView(settings: settings, learning: learning) { [weak self] in self?.showWelcome() }
+            SettingsView(settings: settings, learning: learning,
+                         showWelcome: { [weak self] in self?.showWelcome() },
+                         diagnostics: { [windows, settings] in Diagnostics.report(model: windows, settings: settings) })
         }
     }
 

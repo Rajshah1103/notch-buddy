@@ -239,6 +239,11 @@ private struct DockItem: View {
         .buttonStyle(PressStyle())
         .frame(width: slot)
         .pointerHover { if $0 { onHover() } }
+        .contextMenu {
+            Button("Hide \(group.name) from Notch Hub") {
+                AppSettings.shared.hiddenApps.insert(group.bundleID ?? group.name)
+            }
+        }
         .accessibilityLabel(group.name)
         .accessibilityHint("Open \(group.name)")
     }
