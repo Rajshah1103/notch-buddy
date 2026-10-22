@@ -13,9 +13,12 @@ let package = Package(
         .target(name: "ClaudeUsage"),
         // Pull requests that need you and the state of your own, from GitHub's GraphQL API.
         .target(name: "GitHubKit"),
-        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore", "ClaudeUsage", "GitHubKit"]),
+        // Build state and live progress from a Jenkins server, which is usually behind a VPN.
+        .target(name: "JenkinsKit"),
+        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore", "ClaudeUsage", "GitHubKit", "JenkinsKit"]),
         .testTarget(name: "WindowEngineTests", dependencies: ["WindowEngine"]),
         .testTarget(name: "ClaudeUsageTests", dependencies: ["ClaudeUsage"]),
         .testTarget(name: "GitHubKitTests", dependencies: ["GitHubKit"]),
+        .testTarget(name: "JenkinsKitTests", dependencies: ["JenkinsKit"]),
     ]
 )
