@@ -12,6 +12,9 @@ private final class NotchController {
     let state: NotchState
     private let panel: NotchPanel
     private let contentHost: NSView
+    private let outline = CAShapeLayer()     // masks the material and content to the notch shape
+    private let edge = CAShapeLayer()        // hairline that defines the shape on any wallpaper
+    private let panelSize: CGSize
     private var collapseWork: DispatchWorkItem?
     private var wasInPrefetchZone = false
     private var intentWork: DispatchWorkItem?
@@ -39,13 +42,19 @@ private final class NotchController {
         panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
 
-        let bounds = NSRect(origin: .zero, size: geometry.panelFrame.size)
-        let container = NSView(frame: bounds)
-        container.wantsLayer = true
+        panelSize = geometry.panelFrame.size
+        let bounds = NSRect(origin: .zero, size: panelSize)
+        let root = NSView(frame: bounds)
+        root.wantsLayer = true
 
-        let backdrop = NSHostingView(rootView: NotchBackdrop(state: state))
-        backdrop.frame = bounds
-        backdrop.autoresizingMask = [.width, .height]
+        // The material: the same translucent glass macOS uses for popovers. It follows light/dark,
+        // the wallpaper behind it, and the Reduce Transparency setting. `.active` keeps it from
+        // going flat, because this panel never becomes the active window.
+        let material = NSVisualEffectView(frame: bounds)
+        material.material = .popover
+        material.blendingMode = .behindWindow
+        material.state = .active
+        material.autoresizingMask = [.width, .height]
 
         let body = content(state)
             .frame(width: geometry.expandedSize.width, height: geometry.expandedSize.height, alignment: .top)
@@ -57,9 +66,27 @@ private final class NotchController {
         contentHost.layer?.opacity = 0
         contentHost.isHidden = true
 
-        container.addSubview(backdrop)
-        container.addSubview(contentHost)
-        panel.contentView = container
+        let clip = NSView(frame: bounds)
+        clip.wantsLayer = true
+        clip.autoresizingMask = [.width, .height]
+        clip.addSubview(material)
+        clip.addSubview(contentHost)
+
+        outline.frame = bounds
+        outline.fillColor = NSColor.black.cgColor
+        outline.path = NotchPath.make(panelSize: panelSize, collapsed: geometry.collapsedSize,
+                                      expanded: geometry.expandedSize, progress: 0)
+        clip.layer?.mask = outline
+        root.addSubview(clip)
+
+        edge.frame = bounds
+        edge.fillColor = nil
+        edge.lineWidth = 0.5
+        edge.path = outline.path
+        edge.opacity = 0
+        root.layer?.addSublayer(edge)
+
+        panel.contentView = root
         panel.orderFrontRegardless()
         state.collapseHandler = { [weak self] in self?.collapse() }
     }
@@ -113,15 +140,38 @@ private final class NotchController {
         animateContent(expanded: expanded)
     }
 
-    /// Fades (and nudges) the content with Core Animation: no SwiftUI work per frame, and starting
-    /// from the layer's current on-screen value keeps it smooth if the pointer flicks in and out.
+    /// Grows the outline and fades the content with Core Animation: no SwiftUI work per frame, and
+    /// starting from the on-screen value keeps it smooth if the pointer flicks in and out.
     private func animateContent(expanded: Bool) {
         guard let layer = contentHost.layer else { return }
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let g = state.geometry
+
+        // Outline (and the hairline that follows it).
+        let target = NotchPath.make(panelSize: panelSize, collapsed: g.collapsedSize,
+                                    expanded: g.expandedSize, progress: expanded ? 1 : 0)
+        let fromPath = outline.presentation()?.path ?? outline.path
+        let timing = expanded ? CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+                              : CAMediaTimingFunction(name: .easeOut)
+        let duration: CFTimeInterval = reduceMotion ? 0.15 : (expanded ? 0.34 : 0.2)
+
+        for shape in [outline, edge] {
+            shape.removeAnimation(forKey: "path")
+            shape.path = target
+            let grow = CABasicAnimation(keyPath: "path")
+            grow.fromValue = fromPath
+            grow.toValue = target
+            grow.duration = duration
+            grow.timingFunction = timing
+            shape.add(grow, forKey: "path")
+        }
+        edge.strokeColor = NSColor.labelColor.withAlphaComponent(0.16).cgColor
+        edge.opacity = expanded ? 1 : 0
+
+        // Content.
         let current = layer.presentation()
         let fromOpacity = current?.opacity ?? layer.opacity
         let fromTransform = current?.transform ?? layer.transform
-
         let toOpacity: Float = expanded ? 1 : 0
         let toTransform = (expanded || reduceMotion) ? CATransform3DIdentity : CATransform3DMakeTranslation(0, 8, 0)
 
@@ -136,12 +186,7 @@ private final class NotchController {
         layer.opacity = toOpacity
         layer.transform = toTransform
 
-        // Strong ease-out in, quicker ease-out away: leaving should never feel like waiting.
-        let timing = expanded ? CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
-                              : CAMediaTimingFunction(name: .easeOut)
-        let duration: CFTimeInterval = expanded ? 0.22 : 0.1
         let delay: CFTimeInterval = expanded ? 0.04 : 0   // lets the shape lead
-
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = fromOpacity
         fade.toValue = toOpacity
@@ -149,7 +194,7 @@ private final class NotchController {
         move.fromValue = fromTransform
         move.toValue = toTransform
         for animation in [fade, move] {
-            animation.duration = reduceMotion ? 0.15 : duration
+            animation.duration = reduceMotion ? 0.15 : (expanded ? 0.22 : 0.1)
             animation.timingFunction = timing
             animation.beginTime = CACurrentMediaTime() + delay
             animation.fillMode = .backwards
