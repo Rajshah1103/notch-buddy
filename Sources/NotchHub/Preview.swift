@@ -9,7 +9,6 @@ import WindowEngine
 enum Preview {
     static func render(to path: String, demo: Bool) {
         _ = NSApplication.shared
-        Theme.skipReveal = true
 
         var snapshot = SystemWindowProvider().snapshot()
         if demo { snapshot = withSampleTitles(snapshot) }
@@ -18,8 +17,10 @@ enum Preview {
         guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return }
         let state = NotchState(geometry: NotchGeometry(screen: screen, expandedSize: size))
 
+        state.isExpanded = true
+
         let model = WindowsModel()
-        model.loadForPreview(snapshot, thumbnails: [:])
+        model.loadForPreview(snapshot)
 
         let root = WindowsView(model: model, notch: state)
             .frame(width: size.width, height: size.height)
