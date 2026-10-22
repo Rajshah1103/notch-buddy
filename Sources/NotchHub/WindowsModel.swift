@@ -59,7 +59,7 @@ final class WindowsModel: ObservableObject {
         inFlight = true
         let provider = provider
         Task.detached {
-            let snapshot = provider.snapshot()
+            let snapshot = PerfProbe.measure("window snapshot") { provider.snapshot() }
             await MainActor.run {
                 self.apply(snapshot)
                 if previews { self.refreshThumbnails() }
@@ -115,6 +115,8 @@ final class WindowsModel: ObservableObject {
         Task {
             var windows: [String: [BrowserWindow]] = [:]
             var denied: [String] = []
+            let start = Date()
+            defer { PerfProbe.log("browser tabs read took \(Int(Date().timeIntervalSince(start) * 1000)) ms") }
             for id in running.sorted() {
                 switch await provider.windows(bundleID: id) {
                 case .success(let found): windows[id] = found

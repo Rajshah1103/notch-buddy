@@ -7,13 +7,13 @@ import WindowEngine
 /// can be checked without screen-recording permission. `--demo` fills in sample window titles.
 @MainActor
 enum Preview {
-    static func render(to path: String, demo: Bool, app: String?) {
+    static func render(to path: String, demo: Bool, app: String?, light: Bool) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
         if demo { snapshot = withSampleTitles(snapshot) }
 
-        let size = CGSize(width: 1000, height: 430)
+        let size = CGSize(width: 1000, height: 440)
         guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return }
         let state = NotchState(geometry: NotchGeometry(screen: screen, expandedSize: size))
 
@@ -24,11 +24,15 @@ enum Preview {
 
         let root = SwitcherView(model: model, notch: state)
             .frame(width: size.width, height: size.height)
+            // Stand-in for the system material, which only exists inside a real window.
             .background(
-                UnevenRoundedRectangle(bottomLeadingRadius: 24, bottomTrailingRadius: 24, style: .continuous)
-                    .fill(.black))
+                UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28, style: .continuous)
+                    .fill(light ? Color(white: 0.96, opacity: 0.94) : Color(white: 0.17, opacity: 0.94)))
             .padding(40)
-            .background(Color(white: 0.16))
+            .background(LinearGradient(colors: light ? [Color(red: 0.62, green: 0.74, blue: 0.9), Color(red: 0.85, green: 0.8, blue: 0.9)]
+                                                      : [Color(red: 0.12, green: 0.16, blue: 0.3), Color(red: 0.25, green: 0.12, blue: 0.3)],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing))
+            .environment(\.colorScheme, light ? .light : .dark)
 
         let host = NSHostingView(rootView: root)
         host.frame = NSRect(x: 0, y: 0, width: size.width + 80, height: size.height + 80)
@@ -75,10 +79,20 @@ enum Preview {
         let titles = ["Pull request #482 · api", "Inbox (12)", "~/notch-hub — zsh", "Roadmap — Notion",
                       "Grafana · latency", "Jenkins · deploy-prod", "AppDelegate.swift", "Slack | #eng"]
         var next = 0
+        var chromeIndex = 0
         func retitled(_ w: WindowRecord) -> WindowRecord {
             defer { next += 1 }
+            if w.appName == "Google Chrome" {
+                // Chrome shows the profile in the window title when there are several.
+                defer { chromeIndex += 1 }
+                let profiles = ["Work", "Personal", "Side project"]
+                return WindowRecord(id: w.id, pid: w.pid, appName: w.appName,
+                                    title: "Page - Google Chrome - \(profiles[chromeIndex % 3])",
+                                    spaceIDs: w.spaceIDs, bounds: w.bounds, order: w.order)
+            }
             return WindowRecord(id: w.id, pid: w.pid, appName: w.appName,
-                                title: titles[next % titles.count], spaceIDs: w.spaceIDs)
+                                title: titles[next % titles.count], spaceIDs: w.spaceIDs,
+                                bounds: w.bounds, order: w.order)
         }
         var copy = snapshot
         copy.spaces = snapshot.spaces.map { space in

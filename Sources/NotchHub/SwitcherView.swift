@@ -10,7 +10,8 @@ struct SwitcherView: View {
     let notch: NotchState
 
     @State private var selectedID: Int32?
-    @State private var hovered: Entry?
+    /// Only the preview pane observes this, so moving across rows does not re-render the list.
+    @StateObject private var hover = HoverStore()
 
     private var selected: AppGroup? {
         if let selectedID, let group = model.groups.first(where: { $0.id == selectedID }) { return group }
@@ -24,16 +25,16 @@ struct SwitcherView: View {
                     onSelect: { selectedID = $0 }, onOpen: open)
                 .padding(.top, 6)
             if let group = selected {
-                Detail(model: model, group: group, hovered: $hovered, onOpen: open)
+                Detail(model: model, group: group, hover: hover, onOpen: open)
                     .padding(.top, 10)
             }
             Spacer(minLength: 0)
-            Hint(model: model).padding(.bottom, 10)
         }
         .padding(.horizontal, 28)
+        .overlay(alignment: .bottom) { Hint(model: model).padding(.bottom, 8) }
         .onReceive(notch.$isExpanded) { expanded in
             // Start each visit from the default: the app you are in, nothing hovered.
-            if !expanded { selectedID = nil; hovered = nil }
+            if !expanded { selectedID = nil; hover.entry = nil }
         }
     }
 
@@ -48,9 +49,16 @@ struct SwitcherView: View {
     private func ears(_ g: NotchGeometry) -> some View {
         if g.hasNotch {
             HStack(spacing: 0) {
-                DesktopPills(spaces: model.snapshot.spaces) { space in
-                    model.switchTo(space)
-                    notch.collapse()
+                Group {
+                    // Full-screen apps get their own Space but are not Desktops; they are reached
+                    // from the app row. Pills only appear when there is more than one Desktop.
+                    let desktops = model.snapshot.spaces.filter { $0.kind == .desktop }
+                    if desktops.count > 1 {
+                        DesktopPills(spaces: desktops) { space in
+                            model.switchTo(space)
+                            notch.collapse()
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, 16)
@@ -74,6 +82,17 @@ struct SwitcherView: View {
         }.count
         return "\(model.groups.count) apps · \(open) open"
     }
+}
+
+enum Layout {
+    /// Height of the list area: the panel (440) minus the notch strip, app row, title and padding.
+    static let listHeight: CGFloat = 288
+}
+
+/// The entry under the pointer. Kept out of SwiftUI state on the big views on purpose.
+@MainActor
+private final class HoverStore: ObservableObject {
+    @Published var entry: Entry?
 }
 
 // MARK: - App row
@@ -120,13 +139,13 @@ private struct DockItem: View {
                         .padding(.horizontal, 5)
                         .frame(minWidth: 17, minHeight: 17)
                         .background(Capsule().fill(Theme.accent))
-                        .overlay(Capsule().strokeBorder(.black, lineWidth: 1.5))
+                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                         .offset(x: 2, y: 2)
                 }
             }
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(isSelected ? 0.16 : 0))
+                    .fill(isSelected ? Theme.fillSelected : Color.clear)
             )
             .contentShape(Rectangle())
         }
@@ -151,10 +170,9 @@ private struct PressStyle: ButtonStyle {
 private struct Detail: View {
     @ObservedObject var model: WindowsModel
     let group: AppGroup
-    @Binding var hovered: Entry?
+    let hover: HoverStore
     let onOpen: (Entry) -> Void
 
-    private let columnWidth: CGFloat = 292
 
     private var items: [PackItem<Entry>] {
         group.entries.flatMap { entry -> [PackItem<Entry>] in
@@ -162,10 +180,18 @@ private struct Detail: View {
         }
     }
 
+    /// Row 34 + 2 spacing; heading 26 + 2 spacing. The height fits inside the panel under the app
+    /// row, with room left for the "+N more" row. A long list trades the preview pane for a third
+    /// column so more fits on screen without scrolling.
+    private func pack() -> (PackedColumns<Entry>, wide: Bool) {
+        let narrow = ColumnPacker.pack(items, columnHeight: Layout.listHeight, headerCost: 28, rowCost: 36, maxColumns: 2)
+        guard narrow.overflow > 0 else { return (narrow, false) }
+        return (ColumnPacker.pack(items, columnHeight: Layout.listHeight, headerCost: 28, rowCost: 36, maxColumns: 3), true)
+    }
+
     var body: some View {
-        // Row 38 + 2 spacing; heading 26 + 2 spacing. Height leaves room for the "+N more" row.
-        let packed = ColumnPacker.pack(items, columnHeight: 336, headerCost: 28, rowCost: 40, maxColumns: 2)
-        let preview = hovered ?? group.primary
+        let (packed, wide) = pack()
+        let columnWidth: CGFloat = wide ? 300 : 292
 
         VStack(alignment: .leading, spacing: 8) {
             title
@@ -178,8 +204,7 @@ private struct Detail: View {
                                 case .header(let text): SectionHeader(text: text)
                                 case .entry(let entry):
                                     EntryRow(entry: entry, icon: model.icons[group.pid],
-                                             isHovered: hovered?.id == entry.id,
-                                             onHover: { hovered = entry }, onOpen: { onOpen(entry) })
+                                             onHover: { hover.entry = entry }, onOpen: { onOpen(entry) })
                                 }
                             }
                             if packed.overflow > 0 && index == packed.columns.count - 1 {
@@ -188,17 +213,14 @@ private struct Detail: View {
                                     .foregroundStyle(Theme.textSecondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 10)
-                                    .frame(height: 28)
+                                    .frame(height: 34)
                             }
                             Spacer(minLength: 0)
                         }
                         .frame(width: columnWidth)
                     }
                 }
-                if let preview {
-                    PreviewPane(entry: preview, icon: model.icons[group.pid],
-                                thumbnail: preview.thumbnailWindowID.flatMap { model.thumbnails[$0] })
-                }
+                if !wide { PreviewHost(model: model, hover: hover, group: group) }
             }
         }
     }
@@ -222,6 +244,20 @@ private struct Detail: View {
     }
 }
 
+/// Shows the hovered entry, or the group's main one when nothing is hovered.
+private struct PreviewHost: View {
+    @ObservedObject var model: WindowsModel
+    @ObservedObject var hover: HoverStore
+    let group: AppGroup
+
+    var body: some View {
+        if let entry = hover.entry ?? group.primary {
+            PreviewPane(entry: entry, icon: model.icons[group.pid],
+                        thumbnail: entry.thumbnailWindowID.flatMap { model.thumbnails[$0] })
+        }
+    }
+}
+
 private struct SectionHeader: View {
     let text: String
 
@@ -239,9 +275,10 @@ private struct SectionHeader: View {
 private struct EntryRow: View {
     let entry: Entry
     let icon: NSImage?
-    let isHovered: Bool
     let onHover: () -> Void
     let onOpen: () -> Void
+
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: onOpen) {
@@ -266,15 +303,18 @@ private struct EntryRow: View {
                 }
             }
             .padding(.horizontal, 10)
-            .frame(height: 38)
+            .frame(height: 34)
             .background(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(Color.white.opacity(isHovered ? 0.12 : 0))
+                    .fill(isHovered ? Theme.fillHover : Color.clear)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
-        .onHover { if $0 { onHover() } }
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering { onHover() }
+        }
         .accessibilityLabel(entry.title)
         .accessibilityHint("Switch to this \(entry.url.isEmpty ? "window" : "tab")")
     }
@@ -336,8 +376,7 @@ private struct PreviewPane: View {
                 if let thumbnail {
                     Image(nsImage: thumbnail).resizable().aspectRatio(contentMode: .fill)
                 } else {
-                    LinearGradient(colors: [Color.white.opacity(0.10), Color.white.opacity(0.04)],
-                                   startPoint: .top, endPoint: .bottom)
+                    Theme.fillQuiet
                     Leading(entry: entry, icon: icon, size: 52)
                 }
             }
@@ -345,7 +384,7 @@ private struct PreviewPane: View {
             .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
+                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
 
             Text(entry.title)
                 .font(.system(size: 14, weight: .semibold))
@@ -410,7 +449,7 @@ private struct DesktopPills: View {
                     .foregroundStyle(isCurrent ? Color.white : Theme.textSecondary)
                     .frame(width: 22, height: 20)
                     .background(
-                        Capsule().fill(isCurrent ? Theme.accent : Color.white.opacity(hovering ? 0.14 : 0))
+                        Capsule().fill(isCurrent ? Theme.accent : (hovering ? Theme.fillHover : Color.clear))
                     )
                     .contentShape(Rectangle())
             }
