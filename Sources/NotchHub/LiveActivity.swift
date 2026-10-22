@@ -1,3 +1,4 @@
+import CalendarKit
 import ClaudeUsage
 import Combine
 import JenkinsKit
@@ -10,11 +11,12 @@ enum LiveLayout {
 }
 
 /// What the collapsed notch shows, if anything. One thing at a time, by priority: Claude working,
-/// else a running Jenkins build. More sources can slot in here later.
+/// else a meeting about to start, else a running Jenkins build. More sources can slot in here later.
 @MainActor
 final class LiveActivityModel: ObservableObject {
     enum Activity: Equatable {
         case claude(since: Date?, sessions: Int)
+        case meeting(title: String, start: Date)
         case build(name: String, progress: Double?, count: Int)
         case none
     }
@@ -25,8 +27,24 @@ final class LiveActivityModel: ObservableObject {
     private var subscriptions = Set<AnyCancellable>()
     private var claudeActivity = Activity.none
     private var buildActivity = Activity.none
+    private var meetingActivity = Activity.none
+    private var meetings: [Meeting] = []
+    private var tick: Timer?
+    /// How early a meeting claims the collapsed notch, and how long after its start it stays.
+    private static let lead: TimeInterval = 5 * 60, linger: TimeInterval = 60
 
-    init(claude: ClaudeModel, jenkins: JenkinsModel) {
+    init(claude: ClaudeModel, jenkins: JenkinsModel, calendar: CalendarModel) {
+        calendar.$state
+            .sink { [weak self] state in
+                if case .ready(let list) = state { self?.meetings = list.filter { !$0.isAllDay } } else { self?.meetings = [] }
+                self?.recompute()
+            }
+            .store(in: &subscriptions)
+        // The window around a meeting opens and closes with the clock, not with any data change.
+        tick = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.recompute() }
+        }
+
         claude.$snapshot
             .sink { [weak self] snapshot in
                 self?.claudeActivity = snapshot.isWorking ? .claude(since: snapshot.workingSince, sessions: snapshot.working.count) : .none
@@ -48,7 +66,11 @@ final class LiveActivityModel: ObservableObject {
     }
 
     private func recompute() {
-        let new: Activity = claudeActivity != .none ? claudeActivity : buildActivity
+        let now = Date()
+        let soon = meetings.filter { $0.start.addingTimeInterval(Self.linger) > now && $0.start.timeIntervalSince(now) <= Self.lead }
+                           .min { $0.start < $1.start }
+        meetingActivity = soon.map { .meeting(title: $0.title, start: $0.start) } ?? .none
+        let new: Activity = claudeActivity != .none ? claudeActivity : (meetingActivity != .none ? meetingActivity : buildActivity)
         let wasActive = current != .none
         guard new != current else { return }
         current = new
@@ -89,6 +111,10 @@ struct LiveView: View {
             Image(systemName: "sparkle")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(Theme.claude)
+        case .meeting:
+            Image(systemName: "calendar")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.accent)
         case .build(_, let progress, _):
             ProgressRing(progress: progress).frame(width: 16, height: 16)
         case .none:
@@ -107,6 +133,10 @@ struct LiveView: View {
                     Text(Self.clock(context.date.timeIntervalSince(since)))
                 }
             }
+        case .meeting(_, let start):
+            TimelineView(.periodic(from: .now, by: 15)) { context in
+                Text(Self.until(start, now: context.date))
+            }
         case .build(_, let progress, let count):
             Text(count > 1 ? "×\(count)" : (progress.map { "\(Int($0 * 100))%" } ?? "…"))
         case .none:
@@ -117,9 +147,16 @@ struct LiveView: View {
     private var accessibilityText: String {
         switch model.current {
         case .claude: return "Claude is working"
+        case .meeting(let title, let start): return "\(title), \(Schedule.countdown(to: start, from: Date()))"
         case .build(let name, let progress, _): return "Build \(name) running" + (progress.map { ", \(Int($0 * 100)) percent" } ?? "")
         case .none: return ""
         }
+    }
+
+    /// "4m", or "now" once it has started.
+    static func until(_ start: Date, now: Date) -> String {
+        let minutes = Int((start.timeIntervalSince(now) / 60).rounded(.up))
+        return minutes <= 0 ? "now" : "\(minutes)m"
     }
 
     static func clock(_ seconds: TimeInterval) -> String {

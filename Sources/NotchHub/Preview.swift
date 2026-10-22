@@ -13,7 +13,7 @@ import WindowEngine
 enum Preview {
     static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?, manyApps: Int = 0,
                        claudePanel: Bool = false, githubPanel: Bool = false, githubConnect: Bool = false,
-                       jenkinsPanel: Bool = false, calendarPanel: Bool = false, live: Bool = false, liveBuild: Bool = false) {
+                       jenkinsPanel: Bool = false, calendarPanel: Bool = false, live: Bool = false, liveBuild: Bool = false, liveMeeting: Bool = false) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
@@ -30,7 +30,7 @@ enum Preview {
         if let search { PreviewSeed.query = search; state.isSearching = true }
 
         let claude = ClaudeModel()
-        claude.loadForPreview(liveBuild ? .idle : sampleClaude())
+        claude.loadForPreview(liveBuild || liveMeeting ? .idle : sampleClaude())
         let jenkins = JenkinsModel()
         jenkins.loadForPreview(sampleJenkins())
         AppSettings.shared.showJenkins = true      // off by default; renders show it
@@ -60,7 +60,7 @@ enum Preview {
         }
         model.loadForPreview(snapshot, browsers: demo ? sampleBrowsers(snapshot) : [:], frontApp: app)
 
-        if live || liveBuild { renderLive(to: path, activity: LiveActivityModel(claude: claude, jenkins: jenkins), state: state, light: light); return }
+        if live || liveBuild || liveMeeting { renderLive(to: path, activity: LiveActivityModel(claude: claude, jenkins: jenkins, calendar: calendar), state: state, light: light); return }
 
         let root = SwitcherView(model: model, hub: hub, web: web, learning: LearningStore(), notch: state)
             .frame(width: size.width, height: size.height)
