@@ -9,7 +9,10 @@ let package = Package(
         .target(name: "WindowEngine"),
         // Notch panel, geometry and hover. Knows nothing about windows or integrations.
         .target(name: "NotchCore"),
-        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore"]),
+        // Live Claude Code activity and token counts, read from its local session transcripts.
+        .target(name: "ClaudeUsage"),
+        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore", "ClaudeUsage"]),
         .testTarget(name: "WindowEngineTests", dependencies: ["WindowEngine"]),
+        .testTarget(name: "ClaudeUsageTests", dependencies: ["ClaudeUsage"]),
     ]
 )
