@@ -1,6 +1,6 @@
 # PRD: Notch Hub (working name) — a live, useful Mac notch
 
-Status: v0.3 — PRD + execution plan (spike done; execution plan added at the end) · Date: 2026-10-22 · Owner: Raj
+Status: v0.4 — see "Build status" below · Date: 2026-10-22 · Owner: Raj
 
 ## 0. Spike result (throwaway, ~/notch-spike, not committed)
 - Validated by Raj: notch overlay appears, hover expands with no delay/jank, Spaces and their windows are listed, and (per Raj) it is working.
@@ -8,6 +8,25 @@ Status: v0.3 — PRD + execution plan (spike done; execution plan added at the e
 - Spike UI is a plain placeholder, not the final design. Final UI gets designed with mockups first (M9).
 - Machine note: only Command Line Tools are installed (no full Xcode). Needed for the product, see Prerequisites.
 Items marked **[my call]** are my defaults, not Raj's decisions. Items marked **[open]** need Raj's answer.
+
+## Build status (2026-10-23)
+| Milestone | State |
+|---|---|
+| M1 Foundations (app shell, notch panel, permissions, menu bar) | Done |
+| M2 WindowEngine (spaces, windows, focus, minimized, full-screen spaces) | Done |
+| M3 Search + hotkey (Control-Option-Space, keyboard control) | Done |
+| M4 Browser tabs | Done, via AppleScript (Chromium browsers) instead of the planned extension; Safari/Firefox not supported |
+| M5 Integration framework + GitHub | Not started |
+| M6 Jenkins | Not started |
+| M7 Claude usage | Done: live ears while working, sessions panel, tokens today. Plan limits are not stored locally, so not shown |
+| M8 Slack + Gmail (multi-account) | Not started |
+| M9 Design polish | In progress: adaptive system material, light and dark |
+| M10 Commercial (licensing, updates, notarization) | Not started; needs Developer ID |
+| M11 Calls | Not started |
+
+Findings that changed the design: macOS "Spaces" include one Space per full-screen app, so Desktops and
+full-screen apps are labelled separately; Chrome reports hidden helper windows, so tabs come from its own
+scripting; window titles are available without Screen Recording only for the current Desktop.
 
 ## 1. Context / Why
 Raj runs ~10 apps across multiple Spaces plus VS Code and ~10 Chrome tabs. Finding anything means swiping between Spaces on the trackpad, hunting, swiping again, then switching Chrome tabs once inside Chrome. Notifications (Slack, Gmail) and CI/CD status live in separate places. The notch is dead screen real estate that is always visible and always at the top. Make it a live "dynamic island" for navigation, notifications and status, so Raj can reach anything in one hover + one click.
