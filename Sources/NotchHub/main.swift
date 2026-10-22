@@ -1,4 +1,5 @@
 import AppKit
+import ClaudeUsage
 import WindowEngine
 
 // `NotchHub --dump` prints what the window engine sees and exits (handy for debugging).
@@ -81,6 +82,21 @@ if let flag = CommandLine.arguments.firstIndex(of: "--focus"), flag + 1 < Comman
     exit(frontmost() == target ? 0 : 1)
 }
 
+// `NotchHub --claude` watches Claude Code activity for a few seconds and prints counts only.
+if CommandLine.arguments.contains("--claude") {
+    let monitor = ClaudeUsageMonitor()
+    var latest = ClaudeSnapshot.idle
+    monitor.onChange = { latest = $0 }
+    monitor.start()
+    for second in 1...12 {
+        RunLoop.main.run(until: Date().addingTimeInterval(1))
+        if second == 2 || second == 12 {
+            print("t=\(second)s  sessions(24h): \(latest.sessions.count)  working now: \(latest.working.count)  tokens today: \(TokenFormat.short(latest.tokensToday))")
+        }
+    }
+    exit(0)
+}
+
 // `NotchHub --tabs` reports how many browser windows and tabs the scripting bridge can see.
 if CommandLine.arguments.contains("--tabs") {
     let provider = BrowserTabsProvider()
@@ -107,7 +123,8 @@ if let flag = CommandLine.arguments.firstIndex(of: "--snapshot"), flag + 1 < Com
         let args = CommandLine.arguments
         let app = args.firstIndex(of: "--app").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
         Preview.render(to: args[flag + 1], demo: args.contains("--demo"), app: app, light: args.contains("--light"),
-                       search: args.firstIndex(of: "--search").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil })
+                       search: args.firstIndex(of: "--search").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil },
+                       claudePanel: args.contains("--claude-panel"), live: args.contains("--live"))
     }
     exit(0)
 }

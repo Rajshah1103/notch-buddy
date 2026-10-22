@@ -7,12 +7,14 @@ import WindowEngine
 /// Apps first, then what is inside the selected app. Everything fits on screen: no scrolling.
 struct SwitcherView: View {
     @ObservedObject var model: WindowsModel
+    @ObservedObject var claude: ClaudeModel
     let notch: NotchState
 
     @State private var selectedID: Int32?
     /// Only the preview pane observes this, so moving across rows does not re-render the list.
     @StateObject private var hover = HoverStore()
 
+    @State private var showingClaude = PreviewSeed.showClaude
     @State private var searching = false
     @State private var query = ""
     @State private var selection = 0
@@ -30,6 +32,8 @@ struct SwitcherView: View {
                 SearchPanel(model: model, query: $query, selection: $selection, focus: $fieldFocused,
                             onOpen: open, onClose: { notch.collapse() })
                     .padding(.top, 8)
+            } else if showingClaude {
+                ClaudePanel(model: claude).padding(.top, 10)
             } else {
                 AppDock(groups: model.groups, icons: model.icons, selectedID: selected?.id,
                         onSelect: { selectedID = $0 }, onOpen: open)
@@ -45,7 +49,7 @@ struct SwitcherView: View {
         .overlay(alignment: .bottom) { Hint(model: model).padding(.bottom, 8) }
         .onReceive(notch.$isExpanded) { expanded in
             // Start each visit from the default: the app you are in, nothing hovered.
-            if !expanded { selectedID = nil; hover.entry = nil }
+            if !expanded { selectedID = nil; hover.entry = nil; showingClaude = false }
         }
         .onReceive(notch.$isSearching) { isSearching in
             searching = isSearching
@@ -71,7 +75,7 @@ struct SwitcherView: View {
     private func ears(_ g: NotchGeometry) -> some View {
         if g.hasNotch {
             HStack(spacing: 0) {
-                Group {
+                HStack(spacing: 10) {
                     // Full-screen apps get their own Space but are not Desktops; they are reached
                     // from the app row. Pills only appear when there is more than one Desktop.
                     let desktops = model.snapshot.spaces.filter { $0.kind == .desktop }
@@ -81,6 +85,7 @@ struct SwitcherView: View {
                             notch.collapse()
                         }
                     }
+                    ClaudeChip(model: claude, isOpen: showingClaude) { showingClaude.toggle() }
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, 16)
@@ -112,6 +117,7 @@ struct SwitcherView: View {
 /// Lets the snapshot tool start the search view with text already typed.
 enum PreviewSeed {
     nonisolated(unsafe) static var query: String?
+    nonisolated(unsafe) static var showClaude = false
 }
 
 enum Layout {

@@ -1,4 +1,5 @@
 import AppKit
+import ClaudeUsage
 import NotchCore
 import SwiftUI
 import WindowEngine
@@ -7,7 +8,8 @@ import WindowEngine
 /// can be checked without screen-recording permission. `--demo` fills in sample window titles.
 @MainActor
 enum Preview {
-    static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?) {
+    static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?,
+                       claudePanel: Bool = false, live: Bool = false) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
@@ -20,10 +22,15 @@ enum Preview {
         state.isExpanded = true
         if let search { PreviewSeed.query = search; state.isSearching = true }
 
+        let claude = ClaudeModel()
+        claude.loadForPreview(sampleClaude())
+        PreviewSeed.showClaude = claudePanel
         let model = WindowsModel()
         model.loadForPreview(snapshot, browsers: demo ? sampleBrowsers(snapshot) : [:], frontApp: app)
 
-        let root = SwitcherView(model: model, notch: state)
+        if live { renderLive(to: path, claude: claude, state: state, light: light); return }
+
+        let root = SwitcherView(model: model, claude: claude, notch: state)
             .frame(width: size.width, height: size.height)
             // Stand-in for the system material, which only exists inside a real window.
             .background(
@@ -46,6 +53,37 @@ enum Preview {
         host.cacheDisplay(in: host.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
         print("Wrote \(path)")
+    }
+
+    /// The collapsed notch with Claude's live ears, drawn at 3x so the detail is visible.
+    private static func renderLive(to path: String, claude: ClaudeModel, state: NotchState, light: Bool) {
+        let g = state.geometry
+        let size = CGSize(width: g.collapsedSize.width + 2 * LiveLayout.extra, height: g.collapsedSize.height)
+        let pill = ClaudeLiveView(model: claude, notch: state)
+            .frame(width: size.width, height: size.height)
+            .background(UnevenRoundedRectangle(bottomLeadingRadius: 9, bottomTrailingRadius: 9, style: .continuous)
+                .fill(light ? Color(white: 0.96, opacity: 0.94) : Color(white: 0.17, opacity: 0.94)))
+            .padding(.horizontal, 30).padding(.bottom, 20)
+            .frame(width: size.width + 60, alignment: .top)
+            .background(LinearGradient(colors: [Color(red: 0.12, green: 0.16, blue: 0.3), Color(red: 0.25, green: 0.12, blue: 0.3)],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing))
+            .environment(\.colorScheme, light ? .light : .dark)
+        let renderer = ImageRenderer(content: pill)
+        renderer.scale = 3
+        if let image = renderer.nsImage, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+            print("Wrote \(path)")
+        }
+    }
+
+    private static func sampleClaude() -> ClaudeSnapshot {
+        let now = Date()
+        let sessions = [
+            ClaudeSession(id: "1", project: "notch-hub", lastActivity: now, inputTokens: 91_000, outputTokens: 61_200),
+            ClaudeSession(id: "2", project: "after-click", lastActivity: now.addingTimeInterval(-540), inputTokens: 40_100, outputTokens: 22_300),
+            ClaudeSession(id: "3", project: "podyard", lastActivity: now.addingTimeInterval(-7_400), inputTokens: 18_000, outputTokens: 9_400),
+        ]
+        return ClaudeSnapshot(sessions: sessions, working: [sessions[0]], tokensToday: 682_490, workingSince: now.addingTimeInterval(-84))
     }
 
     /// Invented tabs on top of the real Chrome window frames, so a render never reads real tabs.

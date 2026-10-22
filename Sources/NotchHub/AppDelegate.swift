@@ -1,4 +1,5 @@
 import AppKit
+import ClaudeUsage
 import Carbon.HIToolbox
 import ServiceManagement
 import SwiftUI
@@ -7,6 +8,7 @@ import NotchCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let windows = WindowsModel()
+    private let claude = ClaudeModel()
     private var notch: NotchManager?
     private var statusItem: NSStatusItem?
     private var searchHotKey: HotKey?
@@ -15,13 +17,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         let model = windows
+        let claudeModel = claude
         notch = NotchManager(
             expandedSize: CGSize(width: 1000, height: 440),
             onPrefetch: { model.refresh(previews: false) },
             onExpand: { model.refresh(previews: true) },
-            content: { state in AnyView(SwitcherView(model: model, notch: state)) }
+            content: { state in AnyView(SwitcherView(model: model, claude: claudeModel, notch: state)) },
+            liveContent: { state in AnyView(ClaudeLiveView(model: claudeModel, notch: state)) }
         )
         PerfProbe.startStallWatchdog()
+        // While Claude Code works, the collapsed notch widens into a live activity.
+        claude.onWorkingChange = { [weak self] working in
+            PerfProbe.log("claude working = \(working)")
+            self?.notch?.setLive(extra: working ? LiveLayout.extra : nil)
+        }
+        claude.start()
         model.startTrackingRecents()
         notch?.start()
 
