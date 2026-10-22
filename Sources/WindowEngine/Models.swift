@@ -23,18 +23,28 @@ public struct WindowRecord: Identifiable, Hashable {
     }
 }
 
+public enum SpaceKind: Hashable {
+    /// A regular Desktop, the ones shown as "Desktop 1, 2…" in Mission Control.
+    case desktop
+    /// A Space macOS creates for each app that is in full screen.
+    case fullScreen
+}
+
 public struct SpaceInfo: Identifiable, Hashable {
     public let id: Int
     public let index: Int
     public let displayID: String
     public let isCurrent: Bool
+    public let kind: SpaceKind
     public var windows: [WindowRecord]
 
-    public init(id: Int, index: Int, displayID: String, isCurrent: Bool, windows: [WindowRecord] = []) {
+    public init(id: Int, index: Int, displayID: String, isCurrent: Bool,
+                kind: SpaceKind = .desktop, windows: [WindowRecord] = []) {
         self.id = id
         self.index = index
         self.displayID = displayID
         self.isCurrent = isCurrent
+        self.kind = kind
         self.windows = windows
     }
 }

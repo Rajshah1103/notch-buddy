@@ -39,7 +39,9 @@ public final class SystemWindowProvider {
             let current = (display["Current Space"] as? [String: Any])?["ManagedSpaceID"] as? Int
             for space in display["Spaces"] as? [[String: Any]] ?? [] {
                 guard let id = space["ManagedSpaceID"] as? Int else { continue }
-                result.append(SpaceInfo(id: id, index: index, displayID: displayID, isCurrent: id == current))
+                // type 0 is a Desktop; type 4 is the Space macOS makes for a full-screen app.
+                let kind: SpaceKind = (space["type"] as? Int) == 4 ? .fullScreen : .desktop
+                result.append(SpaceInfo(id: id, index: index, displayID: displayID, isCurrent: id == current, kind: kind))
                 index += 1
             }
         }
@@ -111,25 +113,32 @@ public final class SystemWindowProvider {
                 }
                 if attempt < attempts - 1 { try? await Task.sleep(nanoseconds: 25_000_000) }
             }
+            AXUIElementSetAttributeValue(AXUIElementCreateApplication(window.pid), kAXFrontmostAttribute as CFString, kCFBooleanTrue)
         }
-        app?.activate()
+        if let app { bringToFront(app) }
+    }
+
+    /// Opens (or reopens) an app that has no window, like clicking its Dock icon.
+    public func open(_ app: AppRecord) {
+        guard let running = NSRunningApplication(processIdentifier: app.pid) else { return }
+        if running.isHidden { running.unhide() }
+        bringToFront(running)
+    }
+
+    /// `NSRunningApplication.activate()` is cooperative on macOS 14+: an app running in the
+    /// background, like this one, is often not allowed to bring another app forward. Launch Services
+    /// is, and it is exactly what a Dock click uses.
+    private func bringToFront(_ app: NSRunningApplication) {
+        guard let url = app.bundleURL else { app.activate(); return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        configuration.addsToRecentItems = false
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
     }
 
     /// Switches to a Desktop directly, without the swipe animation.
     public func switchTo(_ space: SpaceInfo) {
         CGSManagedDisplaySetCurrentSpace(CGSMainConnectionID(), space.displayID as CFString, space.id)
-    }
-
-    /// Opens (or reopens) an app that has no window, like clicking its Dock icon.
-    public func open(_ app: AppRecord) {
-        if let running = NSRunningApplication(processIdentifier: app.pid), running.isHidden {
-            running.unhide()
-        }
-        guard let url = app.bundleURL else {
-            NSRunningApplication(processIdentifier: app.pid)?.activate()
-            return
-        }
-        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
     // MARK: - Accessibility helpers
