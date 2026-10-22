@@ -23,6 +23,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSAppleEventsUsageDescription</key><string>Notch Hub reads your browser tabs so you can jump straight to one.</string>
 </dict>
 </plist>
 PLIST

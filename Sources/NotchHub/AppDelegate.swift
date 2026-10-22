@@ -14,11 +14,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let model = windows
         notch = NotchManager(
-            expandedSize: CGSize(width: 1000, height: 340),
+            expandedSize: CGSize(width: 1000, height: 430),
             onPrefetch: { model.refresh(previews: false) },
             onExpand: { model.refresh(previews: true) },
-            content: { state in AnyView(WindowsView(model: model, notch: state)) }
+            content: { state in AnyView(SwitcherView(model: model, notch: state)) }
         )
+        model.startTrackingRecents()
         notch?.start()
         model.refresh(previews: false)
         setUpStatusItem()
