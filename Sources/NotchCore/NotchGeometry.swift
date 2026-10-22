@@ -27,10 +27,10 @@ public struct NotchGeometry {
 
     /// Mouse-sensitive strip over the collapsed notch, a little generous so it is easy to hit.
     public var triggerFrame: NSRect {
-        NSRect(x: panelFrame.midX - collapsedSize.width / 2 - 4,
-               y: panelFrame.maxY - collapsedSize.height - 2,
-               width: collapsedSize.width + 8,
-               height: collapsedSize.height + 4)
+        NSRect(x: panelFrame.midX - collapsedSize.width / 2 - 18,
+               y: panelFrame.maxY - collapsedSize.height - 4,
+               width: collapsedSize.width + 36,
+               height: collapsedSize.height + 8)
     }
 
     /// Wider zone around the notch; entering it is the cue to load data before the notch opens.

@@ -23,12 +23,17 @@ private final class NotchController {
     private var collapseWork: DispatchWorkItem?
     private var wasInPrefetchZone = false
     private var intentWork: DispatchWorkItem?
+    private var lastSample: (point: NSPoint, time: CFTimeInterval)?
+    /// Slower than this (points per second) counts as a deliberate approach.
+    private let openSpeed: CGFloat = 500
+    var trace: ((String) -> Void)?
     /// Called after the notch opens from hover.
     var onExpanded: (() -> Void)?
 
-    /// The pointer must rest on the notch this long before it opens, so brushing past it on the way
-    /// to menu bar icons does nothing. Set by the manager (a user setting); 0 opens immediately.
-    var intentDelay: TimeInterval = 0.06
+    /// When the pointer arrives fast, how long it must then hold still on the notch before it opens.
+    /// Brushing past on the way to a menu bar icon never stops, so it never opens. A slow approach
+    /// opens immediately regardless. Set by the manager (a user setting); 0 opens as soon as it arrives.
+    var intentDelay: TimeInterval = 0.04
 
     /// How long the pointer may stray outside the open notch before it collapses.
     private let collapseDelay: TimeInterval = 0.25
@@ -127,6 +132,12 @@ private final class NotchController {
 
     /// Returns true when the notch just expanded.
     func mouseMoved(to point: NSPoint) -> Bool {
+        let now = CACurrentMediaTime()
+        let speed: CGFloat = lastSample.map {
+            hypot(point.x - $0.point.x, point.y - $0.point.y) / CGFloat(max(now - $0.time, 0.001))
+        } ?? 0
+        lastSample = (point, now)
+
         if state.isSearching || state.isTyping { return false }
         let g = state.geometry
         if state.isExpanded {
@@ -141,12 +152,15 @@ private final class NotchController {
             return false
         }
         if g.triggerFrame.insetBy(dx: -liveExtra, dy: 0).contains(point) {
-            if intentWork == nil {
-                let work = DispatchWorkItem { [weak self] in
-                    self?.intentWork = nil
-                    self?.setExpanded(true)
-                    self?.onExpanded?()
-                }
+            trace?("pointer in zone, speed \(Int(speed)) pt/s")
+            if speed < openSpeed {
+                // A slow, deliberate approach: open at once.
+                openNow()
+            } else {
+                // Moving fast: either on the way somewhere else (a menu bar icon) or about to stop here.
+                // Open only if the pointer comes to rest; any further movement restarts the wait.
+                intentWork?.cancel()
+                let work = DispatchWorkItem { [weak self] in self?.openNow() }
                 intentWork = work
                 if intentDelay <= 0 { work.perform() } else {
                     DispatchQueue.main.asyncAfter(deadline: .now() + intentDelay, execute: work)
@@ -157,6 +171,15 @@ private final class NotchController {
             intentWork = nil
         }
         return false
+    }
+
+    private func openNow() {
+        intentWork?.cancel()
+        intentWork = nil
+        guard !state.isExpanded else { return }
+        trace?("opening")
+        setExpanded(true)
+        onExpanded?()
     }
 
     private func setExpanded(_ expanded: Bool) {
@@ -180,7 +203,7 @@ private final class NotchController {
                                     progress: expanded ? 1 : 0, liveExtra: liveExtra)
         let timing = expanded ? CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
                               : CAMediaTimingFunction(name: .easeOut)
-        animateOutline(to: target, duration: reduceMotion ? 0.15 : (expanded ? 0.34 : 0.2), timing: timing)
+        animateOutline(to: target, duration: reduceMotion ? 0.12 : (expanded ? 0.26 : 0.18), timing: timing)
         edge.strokeColor = NSColor.labelColor.withAlphaComponent(0.16).cgColor
         edge.opacity = expanded ? 1 : (liveExtra > 0 ? 1 : 0)
         fadeLive(visible: !expanded && liveExtra > 0, quickly: expanded)
@@ -203,7 +226,7 @@ private final class NotchController {
         layer.opacity = toOpacity
         layer.transform = toTransform
 
-        let delay: CFTimeInterval = expanded ? 0.04 : 0   // lets the shape lead
+        let delay: CFTimeInterval = 0   // content and shape start together: waiting reads as lag
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = fromOpacity
         fade.toValue = toOpacity
@@ -211,7 +234,7 @@ private final class NotchController {
         move.fromValue = fromTransform
         move.toValue = toTransform
         for animation in [fade, move] {
-            animation.duration = reduceMotion ? 0.15 : (expanded ? 0.22 : 0.1)
+            animation.duration = reduceMotion ? 0.12 : (expanded ? 0.14 : 0.08)
             animation.timingFunction = timing
             animation.beginTime = CACurrentMediaTime() + delay
             animation.fillMode = .backwards
@@ -319,8 +342,13 @@ public final class NotchManager {
     private var controllers: [NotchController] = []
     private var liveExtraWidth: CGFloat = 0
 
+    /// Debug hook: called with short messages about hover decisions.
+    public var trace: ((String) -> Void)? {
+        didSet { controllers.forEach { $0.trace = trace } }
+    }
+
     /// Seconds the pointer must rest on the notch before it opens (0 = immediately).
-    public var hoverDelay: TimeInterval = 0.06 {
+    public var hoverDelay: TimeInterval = 0.04 {
         didSet { controllers.forEach { $0.intentDelay = hoverDelay } }
     }
     private var globalMonitor: Any?
@@ -383,6 +411,7 @@ public final class NotchManager {
             controller.onExpanded = { [weak self] in self?.onExpand() }
             controller.setLive(extra: liveExtraWidth)
             controller.intentDelay = hoverDelay
+            controller.trace = trace
             return controller
         }
     }
