@@ -14,6 +14,8 @@ private final class NotchController {
     let state: NotchState
     private let panel: NotchPanel
     private let contentHost: NSView
+    private let liveHost: NSView
+    private var liveExtra: CGFloat = 0
     private let outline = CAShapeLayer()     // masks the material and content to the notch shape
     private let edge = CAShapeLayer()        // hairline that defines the shape on any wallpaper
     private let panelSize: CGSize
@@ -31,7 +33,7 @@ private final class NotchController {
     /// How long the pointer may stray outside the open notch before it collapses.
     private let collapseDelay: TimeInterval = 0.25
 
-    init(screen: NSScreen, expandedSize: CGSize, content: (NotchState) -> AnyView) {
+    init(screen: NSScreen, expandedSize: CGSize, content: (NotchState) -> AnyView, live: (NotchState) -> AnyView) {
         self.screen = screen
         let geometry = NotchGeometry(screen: screen, expandedSize: expandedSize)
         state = NotchState(geometry: geometry)
@@ -70,10 +72,19 @@ private final class NotchController {
         contentHost.layer?.opacity = 0
         contentHost.isHidden = true
 
+        // Live activity: shown only while collapsed, in the ears that grow out of the notch.
+        liveHost = NSHostingView(rootView: live(state)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top))
+        liveHost.frame = bounds
+        liveHost.autoresizingMask = [.width, .height]
+        liveHost.wantsLayer = true
+        liveHost.layer?.opacity = 0
+
         let clip = NSView(frame: bounds)
         clip.wantsLayer = true
         clip.autoresizingMask = [.width, .height]
         clip.addSubview(material)
+        clip.addSubview(liveHost)
         clip.addSubview(contentHost)
 
         outline.frame = bounds
@@ -128,7 +139,7 @@ private final class NotchController {
             }
             return false
         }
-        if g.triggerFrame.contains(point) {
+        if g.triggerFrame.insetBy(dx: -liveExtra, dy: 0).contains(point) {
             if intentWork == nil {
                 let work = DispatchWorkItem { [weak self] in
                     self?.intentWork = nil
@@ -162,25 +173,14 @@ private final class NotchController {
         let g = state.geometry
 
         // Outline (and the hairline that follows it).
-        let target = NotchPath.make(panelSize: panelSize, collapsed: g.collapsedSize,
-                                    expanded: g.expandedSize, progress: expanded ? 1 : 0)
-        let fromPath = outline.presentation()?.path ?? outline.path
+        let target = NotchPath.make(panelSize: panelSize, collapsed: g.collapsedSize, expanded: g.expandedSize,
+                                    progress: expanded ? 1 : 0, liveExtra: liveExtra)
         let timing = expanded ? CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
                               : CAMediaTimingFunction(name: .easeOut)
-        let duration: CFTimeInterval = reduceMotion ? 0.15 : (expanded ? 0.34 : 0.2)
-
-        for shape in [outline, edge] {
-            shape.removeAnimation(forKey: "path")
-            shape.path = target
-            let grow = CABasicAnimation(keyPath: "path")
-            grow.fromValue = fromPath
-            grow.toValue = target
-            grow.duration = duration
-            grow.timingFunction = timing
-            shape.add(grow, forKey: "path")
-        }
+        animateOutline(to: target, duration: reduceMotion ? 0.15 : (expanded ? 0.34 : 0.2), timing: timing)
         edge.strokeColor = NSColor.labelColor.withAlphaComponent(0.16).cgColor
-        edge.opacity = expanded ? 1 : 0
+        edge.opacity = expanded ? 1 : (liveExtra > 0 ? 1 : 0)
+        fadeLive(visible: !expanded && liveExtra > 0, quickly: expanded)
 
         // Content.
         let current = layer.presentation()
@@ -218,6 +218,49 @@ private final class NotchController {
         CATransaction.commit()
     }
 
+    private func animateOutline(to target: CGPath, duration: CFTimeInterval, timing: CAMediaTimingFunction) {
+        let fromPath = outline.presentation()?.path ?? outline.path
+        for shape in [outline, edge] {
+            shape.removeAnimation(forKey: "path")
+            shape.path = target
+            let grow = CABasicAnimation(keyPath: "path")
+            grow.fromValue = fromPath
+            grow.toValue = target
+            grow.duration = duration
+            grow.timingFunction = timing
+            shape.add(grow, forKey: "path")
+        }
+    }
+
+    private func fadeLive(visible: Bool, quickly: Bool) {
+        guard let layer = liveHost.layer else { return }
+        let from = layer.presentation()?.opacity ?? layer.opacity
+        let to: Float = visible ? 1 : 0
+        layer.removeAnimation(forKey: "fade")
+        layer.opacity = to
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = from
+        fade.toValue = to
+        fade.duration = quickly ? 0.08 : 0.25
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(fade, forKey: "fade")
+    }
+
+    /// A live activity (like Claude working) widens the collapsed notch into the space beside it.
+    func setLive(extra: CGFloat) {
+        guard extra != liveExtra else { return }
+        liveExtra = extra
+        state.liveExtra = extra
+        guard !state.isExpanded else { return }   // takes effect when the notch next collapses
+        let g = state.geometry
+        let target = NotchPath.make(panelSize: panelSize, collapsed: g.collapsedSize, expanded: g.expandedSize,
+                                    progress: 0, liveExtra: extra)
+        animateOutline(to: target, duration: 0.38, timing: CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1))
+        edge.opacity = extra > 0 ? 1 : 0
+        edge.strokeColor = NSColor.labelColor.withAlphaComponent(0.16).cgColor
+        fadeLive(visible: extra > 0, quickly: false)
+    }
+
     func collapse() {
         if state.isSearching { setSearching(false) }
         setExpanded(false)
@@ -250,16 +293,20 @@ private final class NotchController {
 public final class NotchManager {
     private let expandedSize: CGSize
     private let content: (NotchState) -> AnyView
+    private let liveContent: (NotchState) -> AnyView
     private let onExpand: () -> Void
     private let onPrefetch: () -> Void
     private var controllers: [NotchController] = []
+    private var liveExtraWidth: CGFloat = 0
     private var globalMonitor: Any?
     private var localMonitor: Any?
 
     public init(expandedSize: CGSize,
                 onPrefetch: @escaping () -> Void,
                 onExpand: @escaping () -> Void,
-                content: @escaping (NotchState) -> AnyView) {
+                content: @escaping (NotchState) -> AnyView,
+                liveContent: @escaping (NotchState) -> AnyView = { _ in AnyView(EmptyView()) }) {
+        self.liveContent = liveContent
         self.expandedSize = expandedSize
         self.onPrefetch = onPrefetch
         self.onExpand = onExpand
@@ -279,6 +326,12 @@ public final class NotchManager {
             self?.handleMouseMoved()
             return event
         }
+    }
+
+    /// Widens the collapsed notch by `extra` points on each side to show a live activity; nil removes it.
+    public func setLive(extra: CGFloat?) {
+        liveExtraWidth = extra ?? 0
+        controllers.forEach { $0.setLive(extra: liveExtraWidth) }
     }
 
     /// Hotkey entry point: opens search on the screen the pointer is on, or closes it.
@@ -301,8 +354,9 @@ public final class NotchManager {
 
     private func rebuild() {
         controllers = NSScreen.screens.map { screen in
-            let controller = NotchController(screen: screen, expandedSize: expandedSize, content: content)
+            let controller = NotchController(screen: screen, expandedSize: expandedSize, content: content, live: liveContent)
             controller.onExpanded = { [weak self] in self?.onExpand() }
+            controller.setLive(extra: liveExtraWidth)
             return controller
         }
     }

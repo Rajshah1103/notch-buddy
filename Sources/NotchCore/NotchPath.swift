@@ -4,9 +4,9 @@ import CoreGraphics
 /// bottom corners, like the Dynamic Island. Every `progress` yields a path with the same structure,
 /// so Core Animation can interpolate between the collapsed and expanded outlines.
 enum NotchPath {
-    static func make(panelSize: CGSize, collapsed: CGSize, expanded: CGSize, progress: CGFloat) -> CGPath {
+    static func make(panelSize: CGSize, collapsed: CGSize, expanded: CGSize, progress: CGFloat, liveExtra: CGFloat = 0) -> CGPath {
         func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * progress }
-        let w = lerp(collapsed.width, expanded.width)
+        let w = lerp(collapsed.width + 2 * liveExtra, expanded.width)
         let h = lerp(collapsed.height, expanded.height)
         let x0 = (panelSize.width - w) / 2
         let t = min(lerp(0, 12), h / 2, w / 4)
