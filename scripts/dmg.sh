@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ./scripts/bundle.sh
-app=build/NotchHub.app
+app="build/Notch Hub.app"
 dmg=build/NotchHub.dmg
 staging=build/dmg-staging
 
