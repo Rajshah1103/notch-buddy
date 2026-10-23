@@ -151,6 +151,8 @@ struct SwitcherView: View {
 enum PreviewSeed {
     nonisolated(unsafe) static var query: String?
     nonisolated(unsafe) static var integration: String?
+    /// Title of an entry to show in the preview pane as if hovered.
+    nonisolated(unsafe) static var hoverTitle: String?
 }
 
 enum Layout {
@@ -359,10 +361,13 @@ private struct PreviewHost: View {
     let width: CGFloat
 
     var body: some View {
-        if let entry = hover.entry ?? group.primary {
+        let seeded = PreviewSeed.hoverTitle.flatMap { title in group.entries.first { $0.title == title } }
+        if let entry = hover.entry ?? seeded ?? group.primary {
+            let remembered = model.tabShot(for: entry)
             PreviewPane(entry: entry, icon: model.icons[group.pid],
                         thumbnail: entry.thumbnailWindowID.flatMap { model.thumbnails[$0] },
-                        sharp: entry.thumbnailWindowID.flatMap { model.largeThumbnails[$0] }, width: width)
+                        sharp: entry.thumbnailWindowID.flatMap { model.largeThumbnails[$0] },
+                        remembered: remembered?.image, rememberedAge: remembered?.age, width: width)
                 // Ask for a sharp capture once the pointer settles on a window (not on every row it crosses).
                 .task(id: entry.thumbnailWindowID) { model.requestLarge(entry.thumbnailWindowID) }
         }
@@ -515,11 +520,14 @@ private struct PreviewPane: View {
     /// The tile-sized capture, and a sharper one if it has arrived. Either may be missing.
     let thumbnail: NSImage?
     let sharp: NSImage?
+    /// A background tab's picture from when it was last in front, with how long ago that was.
+    var remembered: NSImage? = nil
+    var rememberedAge: String? = nil
     var width: CGFloat = 340
 
     /// The picture is shown whole, never cropped, at the window's own proportions.
     private var imageHeight: CGFloat {
-        let image = sharp ?? thumbnail
+        let image = sharp ?? thumbnail ?? remembered
         guard let image, image.size.width > 0 else { return width * 0.5 }
         return min(width * image.size.height / image.size.width, width > 400 ? 250 : 205)
     }
@@ -528,13 +536,23 @@ private struct PreviewPane: View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack {
                 Theme.fillQuiet
-                if let image = sharp ?? thumbnail {
+                if let image = sharp ?? thumbnail ?? remembered {
                     Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
                 } else {
                     Leading(entry: entry, icon: icon, size: 52)
                 }
             }
             .frame(width: width, height: imageHeight)
+            .overlay(alignment: .bottomLeading) {
+                if sharp == nil, thumbnail == nil, remembered != nil, let age = rememberedAge {
+                    Text("Last seen \(age)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Capsule().fill(.black.opacity(0.55)))
+                        .padding(8)
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))

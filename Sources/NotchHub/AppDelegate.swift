@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppActions.openSettings = { [weak self] in self?.showSettings() }
         model.startTrackingRecents()
         model.startTrackingSpaces()
+        model.startWatchingTabs()
         notch?.start()
         model.refresh(previews: false)
         setUpStatusItem()

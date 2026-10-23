@@ -23,6 +23,11 @@ final class WindowsModel: ObservableObject {
     private let provider = SystemWindowProvider()
     private let browserProvider = BrowserTabsProvider()
     private let thumbnailService = ThumbnailService()
+    /// Pictures of tabs from when they were last in front; a background tab cannot be captured live.
+    private let tabShots = TabShotCache()
+    @Published private(set) var tabShotsRevision = 0
+    private var watchedTab: (key: String, reads: Int)?
+    private var watchInFlight = false
     private var browserWindows: [String: [BrowserWindow]] = [:]
     /// Entries just closed, hidden until the next real read confirms they are gone.
     private var hiddenEntryIDs: Set<String> = []
@@ -170,6 +175,68 @@ final class WindowsModel: ObservableObject {
                 updated[id] = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
             }
             thumbnails = updated   // one publish for the whole batch
+            rememberActiveTabs(images)
+        }
+    }
+
+    /// Keeps the picture of each browser's front tab, so it can be shown later when that tab is in the back.
+    private func rememberActiveTabs(_ images: [UInt32: CGImage]) {
+        let titles = Dictionary(snapshot.spaces.flatMap(\.windows).map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+        var stored = false
+        for group in groups where group.isBrowserWithTabs {
+            for entry in group.entries {
+                guard case .tab(let tab, _) = entry.target, tab.isActive,
+                      let id = entry.thumbnailWindowID, let image = images[id],
+                      !TabShotKey.isPrivateWindow(title: titles[id] ?? "") else { continue }
+                if tabShots.store(image, key: TabShotKey.key(tabTitle: tab.title)) { stored = true }
+            }
+        }
+        if stored { tabShotsRevision += 1 }
+    }
+
+    /// The remembered picture of a background tab, with how long ago it was taken.
+    func tabShot(for entry: Entry) -> (image: NSImage, age: String)? {
+        guard entry.thumbnailWindowID == nil, case .tab(let tab, _) = entry.target,
+              let shot = tabShots.shot(for: TabShotKey.key(tabTitle: tab.title)),
+              let image = NSImage(data: shot.data) else { return nil }
+        return (image, TabShotCache.age(shot.taken))
+    }
+
+    /// While a browser is in front, remembers its tab once the title has held still for two reads (a tab
+    /// that is still loading keeps changing it), and again every 30 seconds so the picture stays recent.
+    func startWatchingTabs() {
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.watchFrontTab() }
+        }
+    }
+
+    private func watchFrontTab() {
+        guard capturesThumbnails, readsBrowsers, !watchInFlight, Permissions.screenRecordingGranted,
+              let front = NSWorkspace.shared.frontmostApplication, let bundleID = front.bundleIdentifier,
+              BrowserTabsProvider.supportedBundleIDs.contains(bundleID) else { watchedTab = nil; return }
+        watchInFlight = true
+        let provider = provider, pid = front.processIdentifier, name = front.localizedName ?? ""
+        Task.detached {
+            let snapshot = provider.snapshot()
+            await MainActor.run { self.finishWatching(snapshot, pid: pid, appName: name) }
+        }
+    }
+
+    private func finishWatching(_ snapshot: Snapshot, pid: Int32, appName: String) {
+        watchInFlight = false
+        // The front-most real window: helper and popup windows have no title or are tiny.
+        let candidates = snapshot.spaces.filter(\.isCurrent).flatMap(\.windows)
+            .filter { $0.pid == pid && !$0.title.isEmpty && $0.bounds.width > 300 && $0.bounds.height > 200 }
+        guard let window = candidates.min(by: { $0.order < $1.order }),
+              !TabShotKey.isPrivateWindow(title: window.title) else { return }
+        let key = TabShotKey.key(windowTitle: window.title, appName: appName)
+        guard !key.isEmpty else { return }
+        if watchedTab?.key != key { watchedTab = (key, 1); return }
+        if let shot = tabShots.shot(for: key), Date().timeIntervalSince(shot.taken) < 30 { return }
+        let service = thumbnailService, id = window.id
+        Task {
+            guard let image = await service.capture([id], maxWidth: 560)[id] else { return }   // throttled just after a capture; the next read retries
+            if tabShots.store(image, key: key) { tabShotsRevision += 1; PerfProbe.log("remembered front tab (\(tabShots.count) kept)") }
         }
     }
 
@@ -245,6 +312,12 @@ final class WindowsModel: ObservableObject {
     func setPreviewIcon(_ image: NSImage, for pid: Int32) { icons[pid] = image }
 
     /// For the snapshot tool: load data directly.
+    /// For design renders: pretend this tab was last in front a few minutes ago.
+    func rememberForPreview(_ image: CGImage, tabTitle: String, minutesAgo: Double) {
+        tabShots.store(image, key: TabShotKey.key(tabTitle: tabTitle), at: Date().addingTimeInterval(-minutesAgo * 60))
+        tabShotsRevision += 1
+    }
+
     func loadForPreview(_ snapshot: Snapshot, browsers: [String: [BrowserWindow]], frontApp: String?) {
         capturesThumbnails = false
         readsBrowsers = false

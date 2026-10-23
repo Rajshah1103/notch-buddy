@@ -13,7 +13,7 @@ import WindowEngine
 enum Preview {
     static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?, manyApps: Int = 0,
                        claudePanel: Bool = false, githubPanel: Bool = false, githubConnect: Bool = false,
-                       jenkinsPanel: Bool = false, calendarPanel: Bool = false, live: Bool = false, liveBuild: Bool = false, liveMeeting: Bool = false) {
+                       jenkinsPanel: Bool = false, calendarPanel: Bool = false, live: Bool = false, liveBuild: Bool = false, liveMeeting: Bool = false, tabShot: Bool = false) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
@@ -59,6 +59,11 @@ enum Preview {
             }
         }
         model.loadForPreview(snapshot, browsers: demo ? sampleBrowsers(snapshot) : [:], frontApp: app)
+        if tabShot {
+            let title = "Inbox (12) — raj@acme.com"
+            PreviewSeed.hoverTitle = title
+            model.rememberForPreview(sampleTabImage(), tabTitle: title, minutesAgo: 3)
+        }
 
         if live || liveBuild || liveMeeting { renderLive(to: path, activity: LiveActivityModel(claude: claude, jenkins: jenkins, calendar: calendar), state: state, light: light); return }
 
@@ -255,4 +260,17 @@ private func sampleMeetings() -> [Meeting] {
         at(150, 30, "1:1 with Priya", color: orange),
         at(260, 60, "Quarterly planning", color: blue, join: "https://teams.microsoft.com/l/meetup-join/abc"),
     ]
+}
+
+
+/// A stand-in page for design renders: a header bar and a few lines of "text".
+private func sampleTabImage() -> CGImage {
+    let w = 560, h = 350
+    let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    context.setFillColor(CGColor(red: 0.97, green: 0.97, blue: 0.98, alpha: 1)); context.fill(CGRect(x: 0, y: 0, width: w, height: h))
+    context.setFillColor(CGColor(red: 0.85, green: 0.19, blue: 0.16, alpha: 1)); context.fill(CGRect(x: 0, y: h - 44, width: w, height: 44))
+    context.setFillColor(CGColor(red: 0.82, green: 0.83, blue: 0.86, alpha: 1))
+    for row in 0..<7 { context.fill(CGRect(x: 24, y: h - 90 - row * 38, width: row % 3 == 0 ? 300 : 460, height: 12)) }
+    return context.makeImage()!
 }

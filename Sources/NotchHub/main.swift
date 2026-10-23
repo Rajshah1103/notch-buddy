@@ -195,7 +195,7 @@ if let flag = CommandLine.arguments.firstIndex(of: "--snapshot"), flag + 1 < Com
                        manyApps: args.firstIndex(of: "--many-apps").flatMap { $0 + 1 < args.count ? Int(args[$0 + 1]) : nil } ?? 0,
                        claudePanel: args.contains("--claude-panel"), githubPanel: args.contains("--github-panel"),
                        githubConnect: args.contains("--github-connect"), jenkinsPanel: args.contains("--jenkins-panel"), calendarPanel: args.contains("--calendar-panel"),
-                       live: args.contains("--live"), liveBuild: args.contains("--live-build"), liveMeeting: args.contains("--live-meeting"))
+                       live: args.contains("--live"), liveBuild: args.contains("--live-build"), liveMeeting: args.contains("--live-meeting"), tabShot: args.contains("--tab-shot"))
     }
     exit(0)
 }
