@@ -18,11 +18,14 @@ let package = Package(
         // Today's meetings from the Calendar app (which can hold Google, iCloud and Exchange calendars), with
         // video-call links found in the invite.
         .target(name: "CalendarKit"),
-        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore", "ClaudeUsage", "GitHubKit", "JenkinsKit", "CalendarKit"]),
+        // Unread mail from Gmail (read-only), signed in with the user's own Google Cloud OAuth client.
+        .target(name: "GmailKit"),
+        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore", "ClaudeUsage", "GitHubKit", "JenkinsKit", "CalendarKit", "GmailKit"]),
         .testTarget(name: "WindowEngineTests", dependencies: ["WindowEngine"]),
         .testTarget(name: "ClaudeUsageTests", dependencies: ["ClaudeUsage"]),
         .testTarget(name: "GitHubKitTests", dependencies: ["GitHubKit"]),
         .testTarget(name: "JenkinsKitTests", dependencies: ["JenkinsKit"]),
         .testTarget(name: "CalendarKitTests", dependencies: ["CalendarKit"]),
+        .testTarget(name: "GmailKitTests", dependencies: ["GmailKit"]),
     ]
 )
