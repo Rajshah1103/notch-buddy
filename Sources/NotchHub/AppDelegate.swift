@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        installEditMenu()
 
         let model = windows
         let liveModel = live
@@ -67,6 +68,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !settings.hasOnboarded {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.showWelcome() }
         }
+    }
+
+    /// An app with no menu bar item has no Edit menu, and ⌘V, ⌘C, ⌘X, ⌘A and ⌘Z are menu shortcuts: without
+    /// one, text fields (the notch's search, token and client ID fields, Settings) cannot paste or copy.
+    private func installEditMenu() {
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let main = NSMenu()
+        let appSlot = NSMenuItem()
+        appSlot.submenu = NSMenu()                          // the application menu slot
+        let editSlot = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        editSlot.submenu = edit
+        main.addItem(appSlot)
+        main.addItem(editSlot)
+        NSApp.mainMenu = main
     }
 
     // MARK: - Settings
