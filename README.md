@@ -83,6 +83,9 @@ signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Devel
     NotchHub --claude                        Claude Code activity (counts only)
     NotchHub --github                        pull request counts from GitHub (counts only)
     NotchHub --focus "App"                   jump to an app and report what came to the front
+    NotchHub --buddy-sheet out.png            every buddy mood, 1x and 3x
+    NotchHub --snapshot out.png --demo --moment gmail|build-ok|build-fail|review|checks-bad|meeting|claude-done|claude-approve
+    NOTCHHUB_DEMO_MOMENT=<same names> NotchHub   shows an invented bubble in the real window 2.5 s after launch
     NotchHub --snapshot out.png --demo [--app "Google Chrome"] [--light] [--search dep] [--claude-panel] [--github-panel] [--github-connect] [--calendar-panel] [--live] [--live-meeting]
                                              render the UI offscreen with invented data
     NotchHub --window settings|welcome out.png [--light]
