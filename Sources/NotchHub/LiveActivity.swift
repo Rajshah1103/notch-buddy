@@ -7,7 +7,7 @@ import SwiftUI
 
 enum LiveLayout {
     /// How far the collapsed notch widens on each side while something is live.
-    static let extra: CGFloat = 72
+    static let extra: CGFloat = 56
 }
 
 /// What the collapsed notch shows, if anything. One thing at a time, by priority: Claude working,
@@ -116,8 +116,9 @@ struct LiveView: View {
             leading.frame(width: LiveLayout.extra)
             Color.clear.frame(width: g.collapsedSize.width)
             trailing
-                .font(.system(size: 11, weight: .medium).monospacedDigit())
-                .foregroundStyle(Theme.textSecondary)
+                .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(Color.white.opacity(0.88))
+                .lineLimit(1).minimumScaleFactor(0.8)
                 .frame(width: LiveLayout.extra)
         }
         .frame(width: g.collapsedSize.width + 2 * LiveLayout.extra, height: g.collapsedSize.height)
@@ -129,19 +130,13 @@ struct LiveView: View {
     private var leading: some View {
         switch model.current {
         case .claude:
-            Image(systemName: "sparkle")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Theme.claude)
+            Badge(symbol: "sparkle", tint: Theme.claude)
         case .waiting(_, let approval):
-            Image(systemName: approval ? "hand.raised.fill" : "checkmark.circle.fill")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(approval ? Theme.claude : Color.green)
+            Badge(symbol: approval ? "hand.raised.fill" : "checkmark", tint: approval ? Theme.claude : .green)
         case .meeting:
-            Image(systemName: "calendar")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.accent)
+            Badge(symbol: "calendar", tint: Theme.accent)
         case .build(_, let progress, _):
-            ProgressRing(progress: progress).frame(width: 16, height: 16)
+            ProgressRing(progress: progress).frame(width: 17, height: 17)
         case .none:
             EmptyView()
         }
@@ -191,6 +186,20 @@ struct LiveView: View {
     static func clock(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds))
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+/// The glyph in an ear: a soft tinted disc with the symbol on it, small enough to read as part of the notch.
+private struct Badge: View {
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            Circle().fill(tint.opacity(0.2))
+            Image(systemName: symbol).font(.system(size: 10.5, weight: .bold)).foregroundStyle(tint)
+        }
+        .frame(width: 21, height: 21)
     }
 }
 

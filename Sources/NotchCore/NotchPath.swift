@@ -10,7 +10,7 @@ enum NotchPath {
         let h = lerp(collapsed.height, expanded.height)
         let x0 = (panelSize.width - w) / 2
         let t = min(lerp(0, 12), h / 2, w / 4)
-        let b = min(lerp(9, 28), h / 2, w / 4)
+        let b = min(lerp(liveExtra > 0 ? 12 : 9, 28), h / 2, w / 4)      // rounder when ears widen the pill
 
         // Built top-down (y grows downward), then flipped into layer coordinates.
         let p = CGMutablePath()

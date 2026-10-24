@@ -238,7 +238,7 @@ private final class NotchController {
                               : CAMediaTimingFunction(name: .easeOut)
         animateOutline(to: target, duration: reduceMotion ? 0.12 : (expanded ? 0.26 : 0.18), timing: timing)
         edge.strokeColor = NSColor.labelColor.withAlphaComponent(0.16).cgColor
-        edge.opacity = expanded ? 1 : (liveExtra > 0 ? 1 : 0)
+        edge.opacity = expanded ? 1 : 0
         fadeLive(visible: !expanded && liveExtra > 0, quickly: expanded)
 
         // Content.
@@ -387,7 +387,7 @@ private final class NotchController {
         let target = NotchPath.make(panelSize: panelSize, collapsed: g.collapsedSize, expanded: g.expandedSize,
                                     progress: 0, liveExtra: extra)
         animateOutline(to: target, duration: 0.38, timing: CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1))
-        edge.opacity = extra > 0 ? 1 : 0
+        edge.opacity = 0                    // ears are black like the hardware: no outline around them
         edge.strokeColor = NSColor.labelColor.withAlphaComponent(0.16).cgColor
         fadeLive(visible: extra > 0, quickly: false)
     }

@@ -121,12 +121,13 @@ enum Preview {
 
     /// The collapsed notch with Claude's live ears, drawn at 3x so the detail is visible.
     private static func renderLive(to path: String, activity: LiveActivityModel, state: NotchState, light: Bool) {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))      // the model settles on the next turn of the run loop
         let g = state.geometry
         let size = CGSize(width: g.collapsedSize.width + 2 * LiveLayout.extra, height: g.collapsedSize.height)
         let pill = LiveView(model: activity, notch: state)
             .frame(width: size.width, height: size.height)
-            .background(UnevenRoundedRectangle(bottomLeadingRadius: 9, bottomTrailingRadius: 9, style: .continuous)
-                .fill(light ? Color(white: 0.96, opacity: 0.94) : Color(white: 0.17, opacity: 0.94)))
+            .background(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12, style: .continuous)
+                .fill(Color.black))
             .padding(.horizontal, 30).padding(.bottom, 20)
             .frame(width: size.width + 60, alignment: .top)
             .background(LinearGradient(colors: [Color(red: 0.12, green: 0.16, blue: 0.3), Color(red: 0.25, green: 0.12, blue: 0.3)],
