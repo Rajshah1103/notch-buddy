@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let jenkins = JenkinsModel()
     private let calendar = CalendarModel()
     private let gmail = GmailModel()
+    private let moments = MomentCenter()
+    private var bridge: BuddyBridge?
     private lazy var live = LiveActivityModel(claude: claude, jenkins: jenkins, calendar: calendar)
     private lazy var hub = IntegrationHub(integrations: [
         ClaudeIntegration(model: claude),
@@ -42,10 +44,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             expandedSize: CGSize(width: 1000, height: 440),
             onPrefetch: { model.refresh(previews: false) },
             onExpand: { model.refresh(previews: true); hub.refresh() },
-            content: { state in AnyView(SwitcherView(model: model, hub: hub, web: web, learning: learning, notch: state)) },
-            liveContent: { state in AnyView(LiveView(model: liveModel, notch: state)) }
+            content: { state in AnyView(SwitcherView(model: model, hub: hub, web: web, learning: learning, live: liveModel, notch: state)) },
+            liveContent: { [moments] state in AnyView(LiveView(model: liveModel, center: moments, notch: state)) }
         )
         notch?.trace = { PerfProbe.log($0) }
+        moments.onBubble = { [weak self] size in self?.notch?.setBubble(size: size) }
+        notch?.setBubbleHover { [weak self] inside in self?.moments.setHeld(inside) }
+        moments.onActivate = { [weak self] moment, action in
+            if action, let url = moment.url { NSWorkspace.shared.open(url) }
+            else if let panel = moment.panel { self?.notch?.openPanel(panel) }
+        }
+        bridge = BuddyBridge(center: moments, claude: claude, gmail: gmail, jenkins: jenkins, github: github, calendar: calendar)
         PerfProbe.startStallWatchdog()
 
         // While Claude Code works, the collapsed notch widens into a live activity.
@@ -58,6 +67,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.startTrackingSpaces()
         model.startWatchingTabs()
         notch?.start()
+        // Debug: NOTCHHUB_DEMO_MOMENT=gmail|build-ok|build-fail|review|checks-bad|meeting|claude-done|claude-approve shows an
+        // invented bubble a moment after launch, so the real window can be checked without any real mail or builds.
+        if let kind = ProcessInfo.processInfo.environment["NOTCHHUB_DEMO_MOMENT"], let demo = Preview.DemoMoments.make(kind) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.moments.post(demo) }
+        }
         model.refresh(previews: false)
         setUpStatusItem()
 

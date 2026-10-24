@@ -16,7 +16,7 @@ enum Preview {
     static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?, manyApps: Int = 0,
                        claudePanel: Bool = false, githubPanel: Bool = false, githubConnect: Bool = false,
                        jenkinsPanel: Bool = false, calendarPanel: Bool = false, live: Bool = false, liveBuild: Bool = false, liveMeeting: Bool = false, tabShot: Bool = false,
-                       gmailPanel: Bool = false, gmailSetup: Bool = false) {
+                       gmailPanel: Bool = false, gmailSetup: Bool = false, demoMoment: String? = nil) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
@@ -72,9 +72,14 @@ enum Preview {
             model.rememberForPreview(sampleTabImage(), tabTitle: title, minutesAgo: 3)
         }
 
-        if live || liveBuild || liveMeeting { renderLive(to: path, activity: LiveActivityModel(claude: claude, jenkins: jenkins, calendar: calendar), state: state, light: light); return }
+        if live || liveBuild || liveMeeting || demoMoment != nil {
+            renderLive(to: path, activity: LiveActivityModel(claude: claude, jenkins: jenkins, calendar: calendar), state: state, light: light,
+                       moment: demoMoment.flatMap(DemoMoments.make))
+            return
+        }
 
-        let root = SwitcherView(model: model, hub: hub, web: web, learning: LearningStore(), notch: state)
+        let root = SwitcherView(model: model, hub: hub, web: web, learning: LearningStore(),
+                                live: LiveActivityModel(claude: claude, jenkins: jenkins, calendar: calendar), notch: state)
             .frame(width: size.width, height: size.height)
             // Stand-in for the system material, which only exists inside a real window.
             .background(
@@ -145,24 +150,46 @@ enum Preview {
     }
 
     /// The collapsed notch with Claude's live ears, drawn at 3x so the detail is visible.
-    private static func renderLive(to path: String, activity: LiveActivityModel, state: NotchState, light: Bool) {
+    private static func renderLive(to path: String, activity: LiveActivityModel, state: NotchState, light: Bool, moment: Moment?) {
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))      // the model settles on the next turn of the run loop
+        let center = MomentCenter()
+        center.loadForPreview(moment)
         let g = state.geometry
-        let size = CGSize(width: g.collapsedSize.width + 2 * LiveLayout.extra, height: g.collapsedSize.height)
-        let pill = LiveView(model: activity, notch: state)
-            .frame(width: size.width, height: size.height)
-            .background(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12, style: .continuous)
+        let ears = g.collapsedSize.width + 2 * LiveLayout.extra
+        let size = CGSize(width: moment == nil ? ears : max(ears, MomentCenter.bubbleSize.width),
+                          height: g.collapsedSize.height + (moment == nil ? 0 : MomentCenter.bubbleSize.height))
+        let pill = LiveView(model: activity, center: center, notch: state)
+            .frame(width: size.width, height: size.height, alignment: .top)
+            .background(UnevenRoundedRectangle(bottomLeadingRadius: moment == nil ? 12 : 24, bottomTrailingRadius: moment == nil ? 12 : 24, style: .continuous)
                 .fill(Color.black))
             .padding(.horizontal, 30).padding(.bottom, 20)
             .frame(width: size.width + 60, alignment: .top)
             .background(LinearGradient(colors: [Color(red: 0.12, green: 0.16, blue: 0.3), Color(red: 0.25, green: 0.12, blue: 0.3)],
                                        startPoint: .topLeading, endPoint: .bottomTrailing))
-            .environment(\.colorScheme, light ? .light : .dark)
+            .environment(\.colorScheme, .dark)
         let renderer = ImageRenderer(content: pill)
         renderer.scale = 3
         if let image = renderer.nsImage, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
             print("Wrote \(path)")
+        }
+    }
+
+    /// Invented events for renders and for checking the real window (never anything from the user's accounts).
+    enum DemoMoments {
+        static func make(_ kind: String) -> Moment? {
+            switch kind {
+            case "gmail": return Moment(id: "demo", source: .gmail, mood: .excited, headline: "new mail", detail: "Priya Nair \u{00B7} Re: Q3 launch checklist", symbol: "envelope.fill", panel: "gmail")
+            case "gmail3": return Moment(id: "demo", source: .gmail, mood: .excited, headline: "3 new mails", detail: "Priya Nair \u{00B7} Re: Q3 launch checklist", symbol: "envelope.fill", panel: "gmail")
+            case "build-ok": return Moment(id: "demo", source: .build, mood: .proud, headline: "build's green", detail: "payments-deploy", symbol: "hammer.fill", panel: "jenkins")
+            case "build-fail": return Moment(id: "demo", source: .build, mood: .sad, headline: "build broke", detail: "payments-deploy", symbol: "hammer.fill", panel: "jenkins")
+            case "review": return Moment(id: "demo", source: .github, mood: .alert, headline: "review pls", detail: "api #482 \u{00B7} Add retry to webhooks", symbol: "arrow.triangle.pull", panel: "github")
+            case "checks-bad": return Moment(id: "demo", source: .github, mood: .shocked, headline: "your checks failed", detail: "api #479 \u{00B7} Fix pagination", symbol: "arrow.triangle.pull", panel: "github")
+            case "meeting": return Moment(id: "demo", source: .calendar, mood: .clockWatching, headline: "meeting in 4m", detail: "Design sync", symbol: "calendar", actionTitle: "Join", panel: "calendar")
+            case "claude-done": return Moment(id: "demo", source: .claude, mood: .happy, headline: "ate that", detail: "Add chat names to the notch", symbol: "sparkle", panel: "claude")
+            case "claude-approve": return Moment(id: "demo", source: .claude, mood: .needsYou, headline: "needs ur ok", detail: "Add chat names to the notch", symbol: "sparkle", panel: "claude")
+            default: return nil
+            }
         }
     }
 

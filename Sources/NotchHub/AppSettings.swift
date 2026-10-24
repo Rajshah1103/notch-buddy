@@ -67,6 +67,8 @@ final class AppSettings: ObservableObject {
     @Published var showGitHub: Bool { didSet { defaults.set(showGitHub, forKey: "showGitHub"); changed() } }
     /// Fall back to the GitHub command line tool's login when no token has been pasted.
     @Published var githubUsesCommandLine: Bool { didSet { defaults.set(githubUsesCommandLine, forKey: "githubUsesCommandLine"); changed() } }
+    /// Pop-out bubbles under the notch that announce events (new mail, builds, reviews, meetings).
+    @Published var showBubbles: Bool { didSet { defaults.set(showBubbles, forKey: "showBubbles"); changed() } }
     @Published var showGmail: Bool { didSet { defaults.set(showGmail, forKey: "showGmail"); changed() } }
     @Published var showCalendar: Bool { didSet { defaults.set(showCalendar, forKey: "showCalendar"); changed() } }
     @Published var showJenkins: Bool { didSet { defaults.set(showJenkins, forKey: "showJenkins"); changed() } }
@@ -96,6 +98,7 @@ final class AppSettings: ObservableObject {
         hiddenApps = Set(defaults.stringArray(forKey: "hiddenApps") ?? [])
         showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
         githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true
+        showBubbles = defaults.object(forKey: "showBubbles") as? Bool ?? true
         showGmail = defaults.bool(forKey: "showGmail")       // off until chosen: it needs the user's own Google client
         showCalendar = defaults.bool(forKey: "showCalendar")      // off until chosen, so no permission prompt appears unasked
         showJenkins = defaults.bool(forKey: "showJenkins")

@@ -10,6 +10,8 @@ struct SwitcherView: View {
     @ObservedObject var hub: IntegrationHub
     @ObservedObject var web: WebBrowser
     @ObservedObject var learning: LearningStore
+    /// What is live right now; the header buddy mirrors it.
+    @ObservedObject var live: LiveActivityModel
     let notch: NotchState
 
     @State private var selectedID: Int32?
@@ -23,6 +25,7 @@ struct SwitcherView: View {
     /// The integration whose panel replaces the app list, if any.
     @State private var openIntegration: String? = PreviewSeed.integration
     @State private var searching = false
+    @State private var isOpen = false
     @State private var query = ""
     @State private var selection = 0
     @FocusState private var fieldFocused: Bool
@@ -77,6 +80,14 @@ struct SwitcherView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
             }
         }
+        .onReceive(notch.$isExpanded) { isOpen = $0 }
+        .onReceive(notch.$requestedPanel) { id in
+            guard let id else { return }
+            // A bubble was clicked: show that source's panel (not the app list or a search).
+            if searching { notch.setSearching(false) }
+            if hub.integration(id) != nil { openIntegration = id }
+            notch.requestedPanel = nil
+        }
         .onReceive(notch.$isSearching) { isSearching in
             searching = isSearching
             if isSearching {
@@ -127,6 +138,13 @@ struct SwitcherView: View {
                 .padding(.trailing, 16)
                 Color.clear.frame(width: g.collapsedSize.width)
                 HStack(spacing: 10) {
+                    // The buddy keeps you company here too, wearing whatever mood is live.
+                    let look = LiveView.look(for: live.current)
+                    // Only drawn (and so only ticking) while the notch is open; the hidden view must cost nothing.
+                    Group {
+                        if isOpen { BuddyView(mood: look?.mood ?? .sleepy, tint: look?.tint ?? Color(white: 0.7), size: 22) }
+                        else { Color.clear.frame(width: 22, height: 22) }
+                    }
                     SearchButton { notch.setSearching(true) }
                     Text(summary)
                         .font(.system(size: 11, weight: .medium).monospacedDigit())

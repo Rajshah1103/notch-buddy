@@ -260,6 +260,11 @@ struct SettingsView: View {
 
     private var integrations: some View {
         Form {
+            Section("Notch Buddy") {
+                Toggle("Show pop-out bubbles for events", isOn: $settings.showBubbles)
+                Text("Your buddy reacts in the notch and a small bubble drops down for new mail, finished or broken builds, review requests, Claude needing you, and meetings. Turn it off to keep only the quiet ears.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Claude Code") {
                 Toggle("Show activity in the notch", isOn: $settings.showClaudeActivity)
                 Text("Reads Claude Code's local session files to show when it is working and how many tokens it used today. Nothing leaves your Mac.")

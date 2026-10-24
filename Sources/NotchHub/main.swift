@@ -224,7 +224,8 @@ if let flag = CommandLine.arguments.firstIndex(of: "--snapshot"), flag + 1 < Com
                        claudePanel: args.contains("--claude-panel"), githubPanel: args.contains("--github-panel"),
                        githubConnect: args.contains("--github-connect"), jenkinsPanel: args.contains("--jenkins-panel"), calendarPanel: args.contains("--calendar-panel"),
                        live: args.contains("--live"), liveBuild: args.contains("--live-build"), liveMeeting: args.contains("--live-meeting"), tabShot: args.contains("--tab-shot"),
-                       gmailPanel: args.contains("--gmail-panel"), gmailSetup: args.contains("--gmail-setup"))
+                       gmailPanel: args.contains("--gmail-panel"), gmailSetup: args.contains("--gmail-setup"),
+                       demoMoment: args.firstIndex(of: "--moment").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil })
     }
     exit(0)
 }

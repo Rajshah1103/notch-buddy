@@ -18,7 +18,7 @@ struct BuddyAnimatorTests {
     @Test func sleepyIsAlwaysShutAndOthersBlinkBriefly() {
         #expect(BuddyAnimator.pose(mood: .sleepy, time: 1.234, sinceChange: 9).blink == 1)
         #expect(BuddyAnimator.pose(mood: .working, time: 1.0, sinceChange: 9).blink == 0)
-        #expect(BuddyAnimator.pose(mood: .working, time: 3.7 + 0.07, sinceChange: 9).blink > 0.9)
+        #expect(BuddyAnimator.pose(mood: .working, time: 3.7 + 0.1, sinceChange: 9).blink > 0.9)
     }
 
     @Test func aChangeOfMoodPopsAndSettles() {

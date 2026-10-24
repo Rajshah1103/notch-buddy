@@ -25,13 +25,15 @@ public struct Moment: Equatable, Identifiable, Sendable {
     public let manyHeadline: String?
     public let actionTitle: String?
     public let url: URL?
+    /// The integration panel a click opens (its id), when the event belongs to one.
+    public let panel: String?
 
     public init(id: String, source: MomentSource, mood: Mood, headline: String, detail: String? = nil, symbol: String,
                 priority: Int = 50, ttl: TimeInterval = 4.5, group: String? = nil, count: Int = 1,
-                manyHeadline: String? = nil, actionTitle: String? = nil, url: URL? = nil) {
+                manyHeadline: String? = nil, actionTitle: String? = nil, url: URL? = nil, panel: String? = nil) {
         self.id = id; self.source = source; self.mood = mood; self.headline = headline; self.detail = detail
         self.symbol = symbol; self.priority = priority; self.ttl = ttl; self.group = group; self.count = count
-        self.manyHeadline = manyHeadline; self.actionTitle = actionTitle; self.url = url
+        self.manyHeadline = manyHeadline; self.actionTitle = actionTitle; self.url = url; self.panel = panel
     }
 }
 

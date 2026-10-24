@@ -10,6 +10,10 @@ public final class NotchState: ObservableObject {
     @Published public var isTyping = false
     /// Extra width on each side of the collapsed notch while a live activity shows (0 when none).
     @Published public var liveExtra: CGFloat = 0
+    /// Size of the pop-out bubble under the collapsed notch while an event is announced; nil when none shows.
+    @Published public var bubbleSize: CGSize?
+    /// A panel (by integration id) asked for by a click on a bubble; the open notch shows it, then clears this.
+    @Published public var requestedPanel: String?
     public let geometry: NotchGeometry
     /// Set by the controller; content calls these after the user picks something.
     var collapseHandler: () -> Void = {}
@@ -19,10 +23,15 @@ public final class NotchState: ObservableObject {
     /// the content does its own hit testing from this.
     public var pointerHandler: ((CGPoint?) -> Void)?
     var typingHandler: (Bool) -> Void = { _ in }
+    var openPanelHandler: (String) -> Void = { _ in }
+    /// Called when the pointer enters or leaves the bubble, so it can stay up while you read it.
+    public var bubbleHoverHandler: ((Bool) -> Void)?
 
     public func collapse() { collapseHandler() }
     public func setSearching(_ on: Bool) { searchHandler(on) }
     public func setTyping(_ on: Bool) { typingHandler(on) }
+    /// Opens the notch on this integration's panel (a bubble was clicked).
+    public func openPanel(_ id: String) { openPanelHandler(id) }
 
     public init(geometry: NotchGeometry) {
         self.geometry = geometry

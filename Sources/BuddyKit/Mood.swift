@@ -58,7 +58,10 @@ public enum BuddyAnimator {
             p.lookY = 0.6
             p.lookX = 0.6 * sin(t * 0.9)
         case .needsYou:
-            p.lift = 0.10 * abs(sin(t * 3.2))                  // hop for attention
+            // Hops at first, then a small nudge every few seconds: still asking, but cheap to draw.
+            let settle = max(0, 1 - dt / 3)
+            let phase = t.truncatingRemainder(dividingBy: 5)
+            p.lift = 0.10 * abs(sin(t * 3.2)) * settle + (phase < 0.6 ? 0.08 * abs(sin(phase / 0.6 * .pi)) : 0)
         case .happy, .proud:
             let settle = max(0, 1 - dt / 1.4)
             p.lift = 0.14 * settle * abs(sin(t * 5))           // a few happy hops, then calm
@@ -67,7 +70,7 @@ public enum BuddyAnimator {
             p.lookY = -0.7
             p.shake = 0.012 * sin(t * 1.3)
         case .excited:
-            p.lift = 0.16 * abs(sin(t * 6.5))
+            p.lift = 0.16 * abs(sin(t * 6.5)) * max(0.12, 1 - dt / 3)
         case .alert:
             p.lookX = sin(t * 5) > 0 ? 0.7 : -0.7
         case .clockWatching:
@@ -78,10 +81,10 @@ public enum BuddyAnimator {
             p.scaleY += 0.06 * max(0, 1 - dt / 0.5)
         }
 
-        // Blink: shut for a tenth of a second every few seconds (never while asleep, which is shut already).
+        // Blink: shut for a fifth of a second every few seconds (never while asleep, which is shut already).
         if mood != .sleepy {
             let phase = t.truncatingRemainder(dividingBy: 3.7)
-            if phase < 0.14 { p.blink = 1 - abs(phase - 0.07) / 0.07 }
+            if phase < 0.2 { p.blink = 1 - abs(phase - 0.1) / 0.1 }
         }
         return p
     }

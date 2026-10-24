@@ -134,6 +134,7 @@ private final class NotchController {
         state.collapseHandler = { [weak self] in self?.collapse() }
         state.searchHandler = { [weak self] on in self?.setSearching(on) }
         state.typingHandler = { [weak self] on in self?.setTyping(on) }
+        state.openPanelHandler = { [weak self] id in self?.openPanel(id) }
 
         // Clicking anywhere else ends a search.
         NotificationCenter.default.addObserver(
@@ -165,6 +166,14 @@ private final class NotchController {
             let frame = state.geometry.panelFrame
             let inside = state.geometry.openFrame.contains(point)
             state.pointerHandler?(inside ? CGPoint(x: point.x - frame.minX, y: frame.maxY - point.y) : nil)
+        }
+
+        if state.bubbleSize != nil, !state.isExpanded {
+            let inside = panel.frame.contains(point)
+            if inside != bubbleHovered { bubbleHovered = inside; state.bubbleHoverHandler?(inside) }
+        } else if bubbleHovered {
+            bubbleHovered = false
+            state.bubbleHoverHandler?(false)
         }
 
         if state.isSearching || state.isTyping { return false }
@@ -215,7 +224,7 @@ private final class NotchController {
         collapseWork?.cancel()
         collapseWork = nil
         guard state.isExpanded != expanded else { return }
-        panel.ignoresMouseEvents = !expanded
+        panel.ignoresMouseEvents = !expanded && state.bubbleSize == nil
         state.isExpanded = expanded
         if !expanded { state.pointerHandler?(nil) }
         animateContent(expanded: expanded)
@@ -233,13 +242,13 @@ private final class NotchController {
 
         // Outline (and the hairline that follows it).
         let target = NotchPath.make(panelSize: panelSize, collapsed: g.collapsedSize, expanded: g.expandedSize,
-                                    progress: expanded ? 1 : 0, liveExtra: liveExtra)
+                                    progress: expanded ? 1 : 0, liveExtra: liveExtra, bubble: state.bubbleSize)
         let timing = expanded ? CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
                               : CAMediaTimingFunction(name: .easeOut)
         animateOutline(to: target, duration: reduceMotion ? 0.12 : (expanded ? 0.26 : 0.18), timing: timing)
         edge.strokeColor = NSColor.labelColor.withAlphaComponent(0.16).cgColor
         edge.opacity = expanded ? 1 : 0
-        fadeLive(visible: !expanded && liveExtra > 0, quickly: expanded)
+        fadeLive(visible: !expanded && (liveExtra > 0 || state.bubbleSize != nil), quickly: expanded)
 
         // Content.
         let current = layer.presentation()
@@ -288,11 +297,15 @@ private final class NotchController {
                                  width: panelSize.width, height: panelSize.height)
     }
 
-    /// The small window that covers the collapsed pill and its live ears.
+    /// The small window that covers the collapsed pill, its live ears and a bubble when one is up.
     private func liveFrame() -> NSRect {
         let g = state.geometry
-        let width = g.collapsedSize.width + 2 * liveExtra + 8
-        let height = g.collapsedSize.height + 6
+        var width = g.collapsedSize.width + 2 * liveExtra + 8
+        var height = g.collapsedSize.height + 6
+        if let bubble = state.bubbleSize {
+            width = max(width, bubble.width + 8)
+            height = g.collapsedSize.height + bubble.height + 6
+        }
         return NSRect(x: g.panelFrame.midX - width / 2, y: g.panelFrame.maxY - height, width: width, height: height)
     }
 
@@ -320,7 +333,7 @@ private final class NotchController {
             self.material.isHidden = true
             // Never ordered out: bringing a hidden window back on screen takes the system ~170 ms, which
             // is felt as the notch opening late. A 2-point window costs nothing and resizes instantly.
-            self.place(self.liveExtra > 0 ? self.liveFrame() : self.sliverFrame())
+            self.place(self.liveExtra > 0 || self.state.bubbleSize != nil ? self.liveFrame() : self.sliverFrame())
             self.panel.orderFrontRegardless()
         }
         restingWork = work
@@ -385,11 +398,44 @@ private final class NotchController {
         }
         let g = state.geometry
         let target = NotchPath.make(panelSize: panelSize, collapsed: g.collapsedSize, expanded: g.expandedSize,
-                                    progress: 0, liveExtra: extra)
+                                    progress: 0, liveExtra: extra, bubble: state.bubbleSize)
         animateOutline(to: target, duration: 0.38, timing: CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1))
         edge.opacity = 0                    // ears are black like the hardware: no outline around them
         edge.strokeColor = NSColor.labelColor.withAlphaComponent(0.16).cgColor
         fadeLive(visible: extra > 0, quickly: false)
+    }
+
+    /// Shows or hides the event bubble under the collapsed notch. The pill grows downward with the ears' own
+    /// spring, the window grows to match, and the panel takes clicks only while the bubble is up.
+    func setBubble(_ size: CGSize?) {
+        guard state.bubbleSize != size else { return }
+        state.bubbleSize = size
+        guard !state.isExpanded else { return }           // the open notch replaces it
+        let g = state.geometry
+        let target = NotchPath.make(panelSize: panelSize, collapsed: g.collapsedSize, expanded: g.expandedSize,
+                                    progress: 0, liveExtra: liveExtra, bubble: size)
+        if size != nil {
+            restingWork?.cancel(); restingWork = nil
+            place(liveFrame())
+            panel.ignoresMouseEvents = false
+            panel.orderFrontRegardless()
+            animateOutline(to: target, duration: 0.42, timing: CAMediaTimingFunction(controlPoints: 0.2, 1.1, 0.3, 1))
+        } else {
+            panel.ignoresMouseEvents = true
+            animateOutline(to: target, duration: 0.3, timing: CAMediaTimingFunction(name: .easeInEaseOut))
+            scheduleResting(after: 0.34)                  // shrink the window once the pill has
+        }
+        edge.opacity = 0
+        fadeLive(visible: size != nil || liveExtra > 0, quickly: false)
+    }
+
+    /// True while the pointer is over the bubble.
+    private var bubbleHovered = false
+
+    func openPanel(_ id: String) {
+        state.requestedPanel = id
+        collapseWork?.cancel(); collapseWork = nil
+        if !state.isExpanded { openNow() }
     }
 
     func collapse() {
@@ -446,6 +492,7 @@ public final class NotchManager {
     private let onPrefetch: () -> Void
     private var controllers: [NotchController] = []
     private var liveExtraWidth: CGFloat = 0
+    private var bubbleHover: ((Bool) -> Void)?
 
     /// Debug hook: called with short messages about hover decisions.
     public var trace: ((String) -> Void)? {
@@ -492,6 +539,23 @@ public final class NotchManager {
         controllers.forEach { $0.setLive(extra: liveExtraWidth) }
     }
 
+    /// Shows or hides the event bubble under the notch (on the notch screen; the only screen on a Mac without one).
+    public func setBubble(size: CGSize?) {
+        let targets = controllers.filter { $0.state.geometry.hasNotch }
+        (targets.isEmpty ? Array(controllers.prefix(1)) : targets).forEach { $0.setBubble(size) }
+    }
+
+    /// Wires the pointer-over-bubble callback of every screen.
+    public func setBubbleHover(_ handler: @escaping (Bool) -> Void) {
+        bubbleHover = handler
+        controllers.forEach { $0.state.bubbleHoverHandler = handler }
+    }
+
+    /// Opens the notch on an integration's panel (a bubble was clicked).
+    public func openPanel(_ id: String) {
+        (controllers.first(where: { $0.state.bubbleSize != nil }) ?? controllers.first)?.openPanel(id)
+    }
+
     /// Hotkey entry point: opens search on the screen the pointer is on, or closes it.
     public func toggleSearch() {
         let target = controllers.first(where: \.containsMouse) ?? controllers.first
@@ -515,6 +579,7 @@ public final class NotchManager {
             let controller = NotchController(screen: screen, expandedSize: expandedSize, content: content, live: liveContent)
             controller.onExpanded = { [weak self] in self?.onExpand() }
             controller.setLive(extra: liveExtraWidth)
+            controller.state.bubbleHoverHandler = bubbleHover
             controller.intentDelay = hoverDelay
             controller.trace = trace
             return controller

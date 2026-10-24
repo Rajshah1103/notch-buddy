@@ -12,6 +12,10 @@ struct BuddyView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var changedAt = Date.timeIntervalSinceReferenceDate
+    /// Right after a mood change the buddy moves a lot, so it ticks fast; then it settles to a slow tick.
+    /// Ticking costs CPU for as long as the view is on screen, so the slow rate is what runs most of the time.
+    @State private var lively = true
+    @State private var settleWork: DispatchWorkItem?
 
     var body: some View {
         Group {
@@ -20,15 +24,26 @@ struct BuddyView: View {
             } else if reduceMotion {
                 canvas(time: 0.5, since: 9)                  // a still pose, no ticking at all
             } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 15)) { context in
+                // Calm rate measured at about 0.5% of a core at 2 fps, and about 1% at 5 to 8 fps.
+                TimelineView(.animation(minimumInterval: lively ? 1.0 / 20 : 1.0 / 2)) { context in
                     let now = context.date.timeIntervalSinceReferenceDate
                     canvas(time: now, since: now - changedAt)
                 }
             }
         }
         .frame(width: size, height: size)
-        .onChange(of: mood) { changedAt = Date.timeIntervalSinceReferenceDate }
+        .onChange(of: mood) { startLively() }
+        .onAppear { startLively() }
         .accessibilityHidden(true)
+    }
+
+    private func startLively() {
+        changedAt = Date.timeIntervalSinceReferenceDate
+        lively = true
+        settleWork?.cancel()
+        let work = DispatchWorkItem { lively = false }
+        settleWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2, execute: work)
     }
 
     private func canvas(time: Double, since: Double) -> some View {

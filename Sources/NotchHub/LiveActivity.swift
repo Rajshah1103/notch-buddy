@@ -1,3 +1,4 @@
+import BuddyKit
 import CalendarKit
 import ClaudeUsage
 import Combine
@@ -104,69 +105,117 @@ private func progress(_ job: JenkinsJob) -> Double {
     return 0
 }
 
-/// The ears beside the collapsed notch: a mark on the left, a short status on the right.
+/// The ears beside the collapsed notch: the buddy on the left, a short status on the right, and, when an
+/// event is announced, a bubble that drops from the notch below them.
 struct LiveView: View {
     @ObservedObject var model: LiveActivityModel
+    @ObservedObject var center: MomentCenter
     let notch: NotchState
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let g = notch.geometry
-        HStack(spacing: 0) {
-            leading.frame(width: LiveLayout.extra)
-            Color.clear.frame(width: g.collapsedSize.width)
-            trailing
-                .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundStyle(Color.white.opacity(0.88))
-                .lineLimit(1).minimumScaleFactor(0.8)
-                .frame(width: LiveLayout.extra)
+        let earsWidth = g.collapsedSize.width + 2 * LiveLayout.extra
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                face.frame(width: LiveLayout.extra)
+                Color.clear.frame(width: g.collapsedSize.width)
+                status
+                    .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .frame(width: LiveLayout.extra)
+            }
+            .frame(width: earsWidth, height: g.collapsedSize.height)
+
+            if let moment = center.showing {
+                Bubble(moment: moment, center: center)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .top)))
+            }
         }
-        .frame(width: g.collapsedSize.width + 2 * LiveLayout.extra, height: g.collapsedSize.height)
-        .accessibilityElement(children: .ignore)
+        .frame(width: max(earsWidth, center.showing == nil ? 0 : MomentCenter.bubbleSize.width), alignment: .top)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
     }
 
-    @ViewBuilder
-    private var leading: some View {
-        switch model.current {
-        case .claude:
-            Badge(symbol: "sparkle", tint: Theme.claude)
-        case .waiting(_, let approval):
-            Badge(symbol: approval ? "hand.raised.fill" : "checkmark", tint: approval ? Theme.claude : .green)
-        case .meeting:
-            Badge(symbol: "calendar", tint: Theme.accent)
-        case .build(_, let progress, _):
-            ProgressRing(progress: progress).frame(width: 17, height: 17)
-        case .none:
-            EmptyView()
+    // MARK: Buddy
+
+    /// What the buddy feels and the colour it wears, from the event on show or else what is live.
+    private var look: (mood: Mood, tint: Color)? {
+        if let moment = center.showing { return (moment.mood, Self.tint(for: moment)) }
+        return Self.look(for: model.current)
+    }
+
+    static func look(for activity: LiveActivityModel.Activity) -> (mood: Mood, tint: Color)? {
+        switch activity {
+        case .claude: return (.working, Theme.claude)
+        case .waiting(_, let approval): return approval ? (.needsYou, Theme.claude) : (.happy, .green)
+        case .meeting: return (.clockWatching, Theme.accent)
+        case .build: return (.working, .orange)
+        case .none: return nil
+        }
+    }
+
+    static func tint(for moment: Moment) -> Color {
+        switch moment.mood {
+        case .proud, .happy: return .green
+        case .sad, .shocked: return Color(red: 0.95, green: 0.3, blue: 0.28)
+        default: break
+        }
+        switch moment.source {
+        case .claude: return Theme.claude
+        case .gmail: return Color(red: 0.92, green: 0.3, blue: 0.26)
+        case .github: return Color(red: 0.62, green: 0.4, blue: 0.95)
+        case .calendar: return Theme.accent
+        case .build: return .orange
+        case .slack: return Color(red: 0.88, green: 0.3, blue: 0.6)
         }
     }
 
     @ViewBuilder
-    private var trailing: some View {
-        switch model.current {
-        case .claude(let since, let sessions):
-            if sessions > 1 {
-                Text("×\(sessions)")
-            } else if let since {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(Self.clock(context.date.timeIntervalSince(since)))
+    private var face: some View {
+        if let look {
+            BuddyView(mood: look.mood, tint: look.tint, size: 24)
+        }
+    }
+
+    // MARK: Status words
+
+    @ViewBuilder
+    private var status: some View {
+        if let moment = center.showing {
+            Image(systemName: moment.symbol).font(.system(size: 12, weight: .bold)).foregroundStyle(Self.tint(for: moment))
+        } else {
+            switch model.current {
+            case .claude(let since, let sessions):
+                if sessions > 1 {
+                    Text("\u{00D7}\(sessions)")
+                } else if let since {
+                    // The timer and a playful word take turns: the word is the personality, the timer the fact.
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let phase = Int(context.date.timeIntervalSinceReferenceDate / 4) % 2
+                        Text(phase == 0 ? Self.clock(context.date.timeIntervalSince(since)) : "cooking")
+                            .id(phase).transition(.opacity)
+                            .animation(.easeInOut(duration: 0.25), value: phase)
+                    }
+                } else {
+                    Text("cooking")
                 }
+            case .waiting(let count, let approval):
+                Text(count > 1 ? "\u{00D7}\(count)" : (approval ? "ur ok?" : "ate that"))
+            case .meeting(_, let start):
+                TimelineView(.periodic(from: .now, by: 15)) { context in
+                    Text(Self.until(start, now: context.date))
+                }
+            case .build(_, let progress, let count):
+                Text(count > 1 ? "\u{00D7}\(count)" : (progress.map { "\(Int($0 * 100))%" } ?? "\u{2026}"))
+            case .none:
+                EmptyView()
             }
-        case .waiting(let count, let approval):
-            Text(count > 1 ? "×\(count)" : (approval ? "Approve" : "Done"))
-        case .meeting(_, let start):
-            TimelineView(.periodic(from: .now, by: 15)) { context in
-                Text(Self.until(start, now: context.date))
-            }
-        case .build(_, let progress, let count):
-            Text(count > 1 ? "×\(count)" : (progress.map { "\(Int($0 * 100))%" } ?? "…"))
-        case .none:
-            EmptyView()
         }
     }
 
     private var accessibilityText: String {
+        if let moment = center.showing { return [moment.headline, moment.detail].compactMap { $0 }.joined(separator: ", ") }
         switch model.current {
         case .claude: return "Claude is working"
         case .waiting(let count, let approval):
@@ -186,6 +235,44 @@ struct LiveView: View {
     static func clock(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds))
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+/// The bubble under the notch: what happened, in two short lines, and a way to act on it.
+private struct Bubble: View {
+    let moment: Moment
+    @ObservedObject var center: MomentCenter
+
+    var body: some View {
+        let tint = LiveView.tint(for: moment)
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(moment.headline)
+                    .font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    .lineLimit(1)
+                if let detail = moment.detail {
+                    Text(detail).font(.system(size: 11.5)).foregroundStyle(Color.white.opacity(0.62)).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            if let action = moment.actionTitle {
+                Button { center.activate(action: true) } label: {
+                    Text(action)
+                        .font(.system(size: 12, weight: .bold, design: .rounded)).foregroundStyle(.black)
+                        .padding(.horizontal, 14).frame(height: 26)
+                        .background(Capsule().fill(tint))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            } else {
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white.opacity(0.4))
+            }
+        }
+        .padding(.horizontal, 24)
+        .frame(width: MomentCenter.bubbleSize.width, height: MomentCenter.bubbleSize.height)
+        .contentShape(Rectangle())
+        .onTapGesture { center.activate(action: false) }
+        .accessibilityAddTraits(.isButton)
     }
 }
 

@@ -4,13 +4,16 @@ import CoreGraphics
 /// bottom corners, like the Dynamic Island. Every `progress` yields a path with the same structure,
 /// so Core Animation can interpolate between the collapsed and expanded outlines.
 enum NotchPath {
-    static func make(panelSize: CGSize, collapsed: CGSize, expanded: CGSize, progress: CGFloat, liveExtra: CGFloat = 0) -> CGPath {
+    static func make(panelSize: CGSize, collapsed: CGSize, expanded: CGSize, progress: CGFloat, liveExtra: CGFloat = 0, bubble: CGSize? = nil) -> CGPath {
         func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * progress }
-        let w = lerp(collapsed.width + 2 * liveExtra, expanded.width)
-        let h = lerp(collapsed.height, expanded.height)
+        // With a bubble the resting pill is wider and grows downward below the notch.
+        let restW = bubble.map { max($0.width, collapsed.width + 2 * liveExtra) } ?? collapsed.width + 2 * liveExtra
+        let restH = bubble.map { collapsed.height + $0.height } ?? collapsed.height
+        let w = lerp(restW, expanded.width)
+        let h = lerp(restH, expanded.height)
         let x0 = (panelSize.width - w) / 2
         let t = min(lerp(0, 12), h / 2, w / 4)
-        let b = min(lerp(liveExtra > 0 ? 12 : 9, 28), h / 2, w / 4)      // rounder when ears widen the pill
+        let b = min(lerp(bubble != nil ? 24 : (liveExtra > 0 ? 12 : 9), 28), h / 2, w / 4)      // rounder when ears widen the pill
 
         // Built top-down (y grows downward), then flipped into layer coordinates.
         let p = CGMutablePath()
