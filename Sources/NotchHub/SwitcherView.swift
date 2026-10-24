@@ -115,7 +115,10 @@ struct SwitcherView: View {
                         }
                     }
                     ForEach(hub.visible, id: \.id) { integration in
-                        integration.chip(isOpen: openIntegration == integration.id) {
+                        integration.chip(isOpen: openIntegration == integration.id && !searching) {
+                            // A panel can't show under the search box: end the search first, and open
+                            // the panel even if it was the one selected before searching began.
+                            if searching { notch.setSearching(false); openIntegration = integration.id; return }
                             openIntegration = openIntegration == integration.id ? nil : integration.id
                         }
                     }
