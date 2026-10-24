@@ -16,7 +16,55 @@ struct TranscriptParserTests {
     @Test func ignoresEverythingElse() {
         #expect(parse(#"{"type":"mode","mode":"x"}"#) == nil)
         #expect(parse("not json at all") == nil)
-        #expect(parse(#"{"message":{"role":"user","usage":{"input_tokens":5}}}"#) == nil)   // only assistant messages count
+        #expect(parse(#"{"message":{"role":"user","usage":{"input_tokens":5}}}"#)?.messageID == nil)   // only assistant messages count
+    }
+}
+
+struct TurnTests {
+    private func turn(_ json: String) -> Turn? { TranscriptParser.parse(Data(json.utf8))?.turn }
+
+    @Test func classifiesWhoSpokeLast() {
+        #expect(turn(#"{"message":{"role":"assistant","stop_reason":"end_turn","content":[{"type":"text"}]}}"#) == .ended)
+        #expect(turn(#"{"message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use"}]}}"#) == .toolUse)
+        #expect(turn(#"{"message":{"role":"assistant","content":[{"type":"thinking"}]}}"#) == .other)
+        #expect(turn(#"{"message":{"role":"user","content":[{"type":"tool_result"}]}}"#) == .user)
+        #expect(turn(#"{"type":"attachment"}"#) == nil)
+    }
+
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+    private func store(_ turn: Turn, _ clock: Box) -> SessionStore {
+        let store = SessionStore(workingWindow: 30, now: { clock.now })
+        var l = TranscriptLine(); l.turn = turn
+        store.ingest(fileID: "a", lines: [l], modified: t0)
+        return store
+    }
+    final class Box { var now: Date; init(_ now: Date) { self.now = now } }
+
+    @Test func anUnansweredToolCallAsksForApprovalAfterAPause() {
+        let clock = Box(t0)
+        let s = store(.toolUse, clock)
+        #expect(s.snapshot().sessions[0].attention == nil)       // might just be a running tool
+        #expect(s.snapshot().isWorking)
+        clock.now = t0.addingTimeInterval(11)
+        #expect(s.snapshot().sessions[0].attention == .approval)
+        #expect(!s.snapshot().isWorking)                            // waiting is not working
+    }
+
+    @Test func aFinishedTurnAsksForAWhileThenStops() {
+        let clock = Box(t0)
+        let s = store(.ended, clock)
+        clock.now = t0.addingTimeInterval(5)
+        #expect(s.snapshot().sessions[0].attention == .finished)
+        clock.now = t0.addingTimeInterval(11 * 60)
+        #expect(s.snapshot().sessions[0].attention == nil)
+    }
+
+    @Test func aPromptOrToolResultMeansWorking() {
+        let clock = Box(t0)
+        let s = store(.user, clock)
+        clock.now = t0.addingTimeInterval(11)
+        #expect(s.snapshot().sessions[0].attention == nil)
+        #expect(s.snapshot().isWorking)
     }
 }
 

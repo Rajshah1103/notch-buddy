@@ -10,6 +10,17 @@ public struct TranscriptLine: Equatable {
     public var messageID: String?
     public var inputTokens = 0       // fresh input, including tokens written to the cache
     public var outputTokens = 0
+    /// Who spoke last on this line, for telling "working" from "waiting on you".
+    public var turn: Turn?
+}
+
+/// Where a conversation stands after a line. An assistant message that ends in a tool call is
+/// waiting on the user (to approve it) or on the tool; one that ends the turn is waiting on the user.
+public enum Turn: Equatable {
+    case ended       // assistant finished its turn
+    case toolUse     // assistant asked to run a tool
+    case other       // assistant is mid-message (thinking, text)
+    case user        // a prompt or a tool result
 }
 
 /// Reads four numbers out of lines that can be megabytes long. It scans bytes in place instead of
@@ -20,18 +31,25 @@ public enum TranscriptParser {
     }
 
     static func parse(_ line: UnsafeRawBufferPointer) -> TranscriptLine? {
-        guard find("\"role\":\"assistant\"", in: line) != nil,
-              let usageAt = find("\"usage\":{", in: line)
-        else { return nil }
-
-        // The message's own id is the first "id" after the start of the message object.
-        guard let messageAt = find("\"message\":{", in: line),
-              let id = string(after: "\"id\":\"", in: line, from: messageAt)
-        else { return nil }
-
-        // Usage numbers sit within a few hundred bytes of the start of the usage object.
-        let window = UnsafeRawBufferPointer(rebasing: line[usageAt..<min(line.count, usageAt + 600)])
         var result = TranscriptLine()
+        if find("\"role\":\"assistant\"", in: line) != nil {
+            result.turn = find("\"stop_reason\":\"end_turn\"", in: line) != nil ? .ended
+                : find("\"type\":\"tool_use\"", in: line) != nil ? .toolUse : .other
+        } else if find("\"role\":\"user\"", in: line) != nil {
+            result.turn = .user
+            return result
+        } else {
+            return nil
+        }
+
+        // Usage needs the message's own id (the first "id" after the start of the message object)
+        // and the usage numbers, which sit within a few hundred bytes of the start of the usage object.
+        guard let usageAt = find("\"usage\":{", in: line),
+              let messageAt = find("\"message\":{", in: line),
+              let id = string(after: "\"id\":\"", in: line, from: messageAt)
+        else { return result }
+
+        let window = UnsafeRawBufferPointer(rebasing: line[usageAt..<min(line.count, usageAt + 600)])
         result.messageID = id
         result.inputTokens = (integer(after: "\"input_tokens\":", in: window) ?? 0)
             + (integer(after: "\"cache_creation_input_tokens\":", in: window) ?? 0)   // cache reads are free re-reads

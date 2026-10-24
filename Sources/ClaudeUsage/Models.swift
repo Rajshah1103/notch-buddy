@@ -1,5 +1,11 @@
 import Foundation
 
+/// Why a quiet session wants a look.
+public enum Attention: Hashable {
+    case approval   // its last move was a tool call and nothing has happened since
+    case finished   // it ended its turn a short while ago
+}
+
 public struct ClaudeSession: Identifiable, Hashable {
     public let id: String
     /// Last path component of the folder the session runs in.
@@ -11,13 +17,15 @@ public struct ClaudeSession: Identifiable, Hashable {
     public let title: String?
     /// Full working folder, for reopening the chat.
     public let cwd: String?
+    public let attention: Attention?
 
     /// What to call the chat in the UI.
     public var displayName: String { title ?? project }
     public var totalTokens: Int { inputTokens + outputTokens }
 
     public init(id: String, project: String, lastActivity: Date, inputTokens: Int, outputTokens: Int,
-                title: String? = nil, cwd: String? = nil) {
+                title: String? = nil, cwd: String? = nil, attention: Attention? = nil) {
+        self.attention = attention
         self.title = title
         self.cwd = cwd
         self.id = id
