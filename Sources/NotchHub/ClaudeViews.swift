@@ -18,10 +18,12 @@ struct ClaudeChip: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: "sparkle").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.claude)
-                if isOpen { Text("Claude").font(.system(size: 11, weight: .medium)) }
-                Text(TokenFormat.short(model.snapshot.tokensToday))
-                    .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(Theme.textSecondary)
+                // The header is crowded; the badge takes the token count's place while chats wait on you.
+                if model.needsYou.isEmpty {
+                    Text(TokenFormat.short(model.snapshot.tokensToday))
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(Theme.textSecondary)
+                }
                 if !model.needsYou.isEmpty {
                     Text("\(model.needsYou.count)")
                         .font(.system(size: 10, weight: .bold).monospacedDigit()).foregroundStyle(.white)

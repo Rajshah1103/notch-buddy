@@ -13,7 +13,6 @@ struct GitHubChip: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: "arrow.triangle.pull").font(.system(size: 10, weight: .bold))
-                if isOpen { Text("GitHub").font(.system(size: 11, weight: .medium)) }
                 if let snapshot = model.snapshot {
                     Text("\(snapshot.reviewRequested.count)")
                         .font(.system(size: 11).monospacedDigit()).foregroundStyle(Theme.textSecondary)

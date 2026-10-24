@@ -1,6 +1,7 @@
 import AppKit
 import CalendarKit
 import ClaudeUsage
+import GmailKit
 import GitHubKit
 import JenkinsKit
 import NotchCore
@@ -13,7 +14,8 @@ import WindowEngine
 enum Preview {
     static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?, manyApps: Int = 0,
                        claudePanel: Bool = false, githubPanel: Bool = false, githubConnect: Bool = false,
-                       jenkinsPanel: Bool = false, calendarPanel: Bool = false, live: Bool = false, liveBuild: Bool = false, liveMeeting: Bool = false, tabShot: Bool = false) {
+                       jenkinsPanel: Bool = false, calendarPanel: Bool = false, live: Bool = false, liveBuild: Bool = false, liveMeeting: Bool = false, tabShot: Bool = false,
+                       gmailPanel: Bool = false, gmailSetup: Bool = false) {
         _ = NSApplication.shared
 
         var snapshot = SystemWindowProvider().snapshot()
@@ -47,9 +49,13 @@ enum Preview {
         ], lastUsed: "Profile 1")
         let github = GitHubModel()
         github.loadForPreview(githubConnect ? nil : sampleGitHub(), needsToken: githubConnect)
+        let gmail = GmailModel()
+        gmail.loadForPreview(gmailSetup ? nil : sampleGmail(), state: gmailSetup ? .needsSetup : .ready)
+        AppSettings.shared.showGmail = true
         let hub = IntegrationHub(integrations: [ClaudeIntegration(model: claude), GitHubIntegration(model: github),
-                                                JenkinsIntegration(model: jenkins), CalendarIntegration(model: calendar)])
-        PreviewSeed.integration = claudePanel ? "claude" : githubPanel ? "github" : jenkinsPanel ? "jenkins" : calendarPanel ? "calendar" : nil
+                                                JenkinsIntegration(model: jenkins), CalendarIntegration(model: calendar),
+                                                GmailIntegration(model: gmail)])
+        PreviewSeed.integration = gmailPanel || gmailSetup ? "gmail" : claudePanel ? "claude" : githubPanel ? "github" : jenkinsPanel ? "jenkins" : calendarPanel ? "calendar" : nil
         let model = WindowsModel()
         for n in 0..<manyApps {
             let symbols = ["safari", "message", "music.note", "photo", "calendar", "envelope", "map", "doc.text", "gearshape", "terminal"]
@@ -173,6 +179,16 @@ enum Preview {
             job("payments/build", .succeeded, number: 560, startedAgo: 9_000, finishedAgo: 8_800),
             job("mobile/release", .succeeded, number: 33, startedAgo: 40_000, finishedAgo: 39_500),
         ], fetchedAt: now)
+    }
+
+    private static func sampleGmail() -> GmailSnapshot {
+        let now = Date()
+        return GmailSnapshot(email: "you@example.com", unread: 14, messages: [
+            GmailMessage(id: "1", from: "Priya Nair", subject: "Re: Q3 launch checklist", date: now.addingTimeInterval(-240)),
+            GmailMessage(id: "2", from: "Stripe", subject: "Your payout of $1,240.00 is on the way", date: now.addingTimeInterval(-3_100)),
+            GmailMessage(id: "3", from: "GitHub", subject: "[notch-hub] Pull request #12 merged", date: now.addingTimeInterval(-7_900)),
+            GmailMessage(id: "4", from: "Alex Chen", subject: "Intro: Notch Hub feedback call", date: now.addingTimeInterval(-18_000)),
+        ])
     }
 
     private static func sampleClaude() -> ClaudeSnapshot {

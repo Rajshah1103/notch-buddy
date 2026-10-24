@@ -285,6 +285,13 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            Section("Gmail") {
+                Toggle("Show unread mail", isOn: $settings.showGmail)
+                if settings.showGmail {
+                    Text("Shows your newest unread messages. Set it up from the Gmail chip in the notch; it can only read mail, and nothing leaves your Mac.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Section("Calendar") {
                 Toggle("Show next meeting", isOn: $settings.showCalendar)
                 if settings.showCalendar {
