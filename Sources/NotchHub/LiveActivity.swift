@@ -16,6 +16,7 @@ enum LiveLayout {
 final class LiveActivityModel: ObservableObject {
     enum Activity: Equatable {
         case claude(since: Date?, sessions: Int)
+        case waiting(count: Int, approval: Bool)
         case meeting(title: String, start: Date)
         case build(name: String, progress: Double?, count: Int)
         case none
@@ -26,6 +27,7 @@ final class LiveActivityModel: ObservableObject {
 
     private var subscriptions = Set<AnyCancellable>()
     private var claudeActivity = Activity.none
+    private var waitingActivity = Activity.none
     private var buildActivity = Activity.none
     private var meetingActivity = Activity.none
     private var meetings: [Meeting] = []
@@ -51,6 +53,13 @@ final class LiveActivityModel: ObservableObject {
                 self?.recompute()
             }
             .store(in: &subscriptions)
+        claude.$needsYou
+            .sink { [weak self] list in
+                self?.waitingActivity = list.isEmpty ? .none
+                    : .waiting(count: list.count, approval: list.contains { $0.attention == .approval })
+                self?.recompute()
+            }
+            .store(in: &subscriptions)
         jenkins.$snapshot
             .sink { [weak self] snapshot in
                 let running = snapshot?.running ?? []
@@ -70,7 +79,7 @@ final class LiveActivityModel: ObservableObject {
         let soon = meetings.filter { $0.start.addingTimeInterval(Self.linger) > now && $0.start.timeIntervalSince(now) <= Self.lead }
                            .min { $0.start < $1.start }
         meetingActivity = soon.map { .meeting(title: $0.title, start: $0.start) } ?? .none
-        let new: Activity = claudeActivity != .none ? claudeActivity : (meetingActivity != .none ? meetingActivity : buildActivity)
+        let new: Activity = claudeActivity != .none ? claudeActivity : waitingActivity != .none ? waitingActivity : (meetingActivity != .none ? meetingActivity : buildActivity)
         let wasActive = current != .none
         guard new != current else { return }
         current = new
@@ -111,6 +120,10 @@ struct LiveView: View {
             Image(systemName: "sparkle")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(Theme.claude)
+        case .waiting(_, let approval):
+            Image(systemName: approval ? "hand.raised.fill" : "checkmark.circle.fill")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(approval ? Theme.claude : Color.green)
         case .meeting:
             Image(systemName: "calendar")
                 .font(.system(size: 13, weight: .semibold))
@@ -133,6 +146,8 @@ struct LiveView: View {
                     Text(Self.clock(context.date.timeIntervalSince(since)))
                 }
             }
+        case .waiting(let count, let approval):
+            Text(count > 1 ? "×\(count)" : (approval ? "Approve" : "Done"))
         case .meeting(_, let start):
             TimelineView(.periodic(from: .now, by: 15)) { context in
                 Text(Self.until(start, now: context.date))
@@ -147,6 +162,8 @@ struct LiveView: View {
     private var accessibilityText: String {
         switch model.current {
         case .claude: return "Claude is working"
+        case .waiting(let count, let approval):
+            return count > 1 ? "\(count) Claude chats need you" : (approval ? "Claude needs your approval" : "Claude finished")
         case .meeting(let title, let start): return "\(title), \(Schedule.countdown(to: start, from: Date()))"
         case .build(let name, let progress, _): return "Build \(name) running" + (progress.map { ", \(Int($0 * 100)) percent" } ?? "")
         case .none: return ""

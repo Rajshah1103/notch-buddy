@@ -22,7 +22,12 @@ struct ClaudeChip: View {
                 Text(TokenFormat.short(model.snapshot.tokensToday))
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
-                if model.snapshot.isWorking { Circle().fill(Theme.claude).frame(width: 6, height: 6) }
+                if !model.needsYou.isEmpty {
+                    Text("\(model.needsYou.count)")
+                        .font(.system(size: 10, weight: .bold).monospacedDigit()).foregroundStyle(.white)
+                        .frame(minWidth: 14, minHeight: 14)
+                        .background(Circle().fill(Theme.claude))
+                } else if model.snapshot.isWorking { Circle().fill(Theme.claude).frame(width: 6, height: 6) }
             }
             .foregroundStyle(isOpen ? Theme.textPrimary : Theme.textSecondary)
             .padding(.horizontal, 9)
@@ -33,7 +38,7 @@ struct ClaudeChip: View {
         .buttonStyle(.plain)
         .pointerHover { hovering = $0 }
         .help("Claude Code")
-        .accessibilityLabel("Claude usage, \(model.snapshot.isWorking ? "working now" : "idle"), \(TokenFormat.short(model.snapshot.tokensToday)) tokens today")
+        .accessibilityLabel("Claude usage, \(model.needsYou.isEmpty ? (model.snapshot.isWorking ? "working now" : "idle") : "\(model.needsYou.count) need you"), \(TokenFormat.short(model.snapshot.tokensToday)) tokens today")
         .accessibilityHint("Shows Claude Code sessions and tokens used today")
     }
 }
@@ -64,7 +69,11 @@ struct ClaudePanel: View {
                             .frame(maxWidth: .infinity).padding(.top, 40)
                     }
                     ForEach(shown) { session in
-                        SessionRow(session: session, isWorking: model.snapshot.working.contains(session))
+                        SessionRow(session: session, isWorking: model.snapshot.working.contains(session),
+                                   needsYou: model.needsYou.contains(session)) {
+                            model.markSeen(session)
+                            ClaudeLauncher.open(session)
+                        }
                     }
                     if sessions.count > shown.count {
                         Text("\(sessions.count - shown.count) more")
@@ -84,21 +93,32 @@ struct ClaudePanel: View {
 private struct SessionRow: View {
     let session: ClaudeSession
     let isWorking: Bool
+    let needsYou: Bool
+    let onOpen: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var status: (text: String, color: Color) {
+        switch (needsYou, session.attention) {
+        case (true, .approval): return ("Waiting for you", Theme.claude)
+        case (true, .finished): return ("Finished", .green)
+        default: return (isWorking ? "Working now" : "Active \(RelativeTime.ago(session.lastActivity))",
+                         isWorking ? Theme.claude : Theme.textSecondary)
+        }
+    }
 
     var body: some View {
         HStack(spacing: 10) {
             Circle()
-                .fill(isWorking ? Theme.claude : Color.secondary.opacity(0.4))
+                .fill(needsYou ? status.color : isWorking ? Theme.claude : Color.secondary.opacity(0.4))
                 .frame(width: 8, height: 8)
                 .symbolEffect(.pulse, isActive: false)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.displayName).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 Text((session.title == nil ? "" : "\(session.project) · ")
-                     + (isWorking ? "Working now" : "Active \(RelativeTime.ago(session.lastActivity))"))
-                    .font(.system(size: 11))
-                    .foregroundStyle(isWorking ? Theme.claude : Theme.textSecondary)
+                     + status.text)
+                    .font(.system(size: 11, weight: needsYou ? .semibold : .regular))
+                    .foregroundStyle(status.color)
             }
             Spacer(minLength: 0)
             Text(TokenFormat.short(session.totalTokens))
@@ -108,7 +128,7 @@ private struct SessionRow: View {
         .padding(.horizontal, 10)
         .frame(height: 38)
         .contentShape(Rectangle())
-        .onTapGesture { ClaudeLauncher.open(session) }
+        .onTapGesture(perform: onOpen)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Opens this chat in Ghostty")
