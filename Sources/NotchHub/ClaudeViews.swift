@@ -94,8 +94,9 @@ private struct SessionRow: View {
                 .symbolEffect(.pulse, isActive: false)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 1) {
-                Text(session.project).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                Text(isWorking ? "Working now" : "Active \(RelativeTime.ago(session.lastActivity))")
+                Text(session.displayName).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                Text((session.title == nil ? "" : "\(session.project) · ")
+                     + (isWorking ? "Working now" : "Active \(RelativeTime.ago(session.lastActivity))"))
                     .font(.system(size: 11))
                     .foregroundStyle(isWorking ? Theme.claude : Theme.textSecondary)
             }
@@ -106,7 +107,11 @@ private struct SessionRow: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 38)
+        .contentShape(Rectangle())
+        .onTapGesture { ClaudeLauncher.open(session) }
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Opens this chat in Ghostty")
     }
 }
 

@@ -178,8 +178,8 @@ enum Preview {
     private static func sampleClaude() -> ClaudeSnapshot {
         let now = Date()
         let sessions = [
-            ClaudeSession(id: "1", project: "notch-hub", lastActivity: now, inputTokens: 91_000, outputTokens: 61_200),
-            ClaudeSession(id: "2", project: "after-click", lastActivity: now.addingTimeInterval(-540), inputTokens: 40_100, outputTokens: 22_300),
+            ClaudeSession(id: "1", project: "notch-hub", lastActivity: now, inputTokens: 91_000, outputTokens: 61_200, title: "Add chat names to the notch"),
+            ClaudeSession(id: "2", project: "after-click", lastActivity: now.addingTimeInterval(-540), inputTokens: 40_100, outputTokens: 22_300, title: "Fix pricing page layout"),
             ClaudeSession(id: "3", project: "podyard", lastActivity: now.addingTimeInterval(-7_400), inputTokens: 18_000, outputTokens: 9_400),
         ]
         return ClaudeSnapshot(sessions: sessions, working: [sessions[0]], tokensToday: 682_490, workingSince: now.addingTimeInterval(-84))
