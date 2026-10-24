@@ -20,7 +20,7 @@ public final class SessionStore {
     private let calendar: Calendar
 
     /// A tool call left unanswered this long is probably a permission prompt rather than a slow tool.
-    private let approvalDelay: TimeInterval = 10
+    private let approvalDelay: TimeInterval = 20
     private let finishedDelay: TimeInterval = 2
     /// How long a finished chat, or an unanswered tool call, keeps asking for attention.
     private let finishedLinger: TimeInterval = 10 * 60, approvalLinger: TimeInterval = 60 * 60
@@ -51,6 +51,17 @@ public final class SessionStore {
         files[fileID] = file
     }
 
+    /// How long a silent transcript still counts as working. Claude writes nothing while it generates a long
+    /// answer or a big tool call, so after a prompt or tool result the quiet can last minutes.
+    private func activeWindow(after turn: Turn?) -> TimeInterval {
+        switch turn {
+        case .user: return max(workingWindow, 180)
+        case .other: return max(workingWindow, 120)
+        case .toolUse: return max(workingWindow, approvalDelay)
+        case .ended, nil: return workingWindow
+        }
+    }
+
     public func snapshot() -> ClaudeSnapshot {
         let current = now()
         let startOfToday = calendar.startOfDay(for: current)
@@ -78,7 +89,7 @@ public final class SessionStore {
                 outputTokens: todays.reduce(0) { $0 + $1.output },
                 title: file.title, cwd: file.cwd, attention: attention)
             sessions.append(session)
-            if attention == nil, current.timeIntervalSince(file.lastWrite) < workingWindow {
+            if attention == nil, current.timeIntervalSince(file.lastWrite) < activeWindow(after: file.turn) {
                 working.append(session)
                 burstStarts.append(file.burstStart)
             }
@@ -94,7 +105,7 @@ public final class SessionStore {
         let current = now()
         var moments: [Date] = []
         for file in files.values {
-            moments.append(file.lastWrite.addingTimeInterval(workingWindow))
+            moments.append(file.lastWrite.addingTimeInterval(activeWindow(after: file.turn)))
             guard let turnAt = file.turnAt else { continue }
             moments += [finishedDelay, approvalDelay, finishedLinger, approvalLinger].map { turnAt.addingTimeInterval($0) }
         }

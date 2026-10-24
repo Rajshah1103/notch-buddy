@@ -45,7 +45,7 @@ struct TurnTests {
         let s = store(.toolUse, clock)
         #expect(s.snapshot().sessions[0].attention == nil)       // might just be a running tool
         #expect(s.snapshot().isWorking)
-        clock.now = t0.addingTimeInterval(11)
+        clock.now = t0.addingTimeInterval(21)
         #expect(s.snapshot().sessions[0].attention == .approval)
         #expect(!s.snapshot().isWorking)                            // waiting is not working
     }
@@ -62,9 +62,11 @@ struct TurnTests {
     @Test func aPromptOrToolResultMeansWorking() {
         let clock = Box(t0)
         let s = store(.user, clock)
-        clock.now = t0.addingTimeInterval(11)
+        clock.now = t0.addingTimeInterval(120)             // a long generation writes nothing for a while
         #expect(s.snapshot().sessions[0].attention == nil)
         #expect(s.snapshot().isWorking)
+        clock.now = t0.addingTimeInterval(200)
+        #expect(!s.snapshot().isWorking)
     }
 }
 

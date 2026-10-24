@@ -74,7 +74,19 @@ final class LiveActivityModel: ObservableObject {
             .store(in: &subscriptions)
     }
 
+    /// Several sources can change in one turn of the run loop (Claude's snapshot, then who needs you); settle
+    /// once afterwards so the ears never flash empty in between.
+    private var recomputePending = false
     private func recompute() {
+        guard !recomputePending else { return }
+        recomputePending = true
+        DispatchQueue.main.async { [weak self] in
+            self?.recomputePending = false
+            self?.settle()
+        }
+    }
+
+    private func settle() {
         let now = Date()
         let soon = meetings.filter { $0.start.addingTimeInterval(Self.linger) > now && $0.start.timeIntervalSince(now) <= Self.lead }
                            .min { $0.start < $1.start }
