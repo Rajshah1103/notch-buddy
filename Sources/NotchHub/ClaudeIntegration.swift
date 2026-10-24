@@ -19,7 +19,7 @@ final class ClaudeIntegration: NotchIntegration {
 
     func start() { model.start() }
     func stop() { model.stop() }
-    func refresh() {}                 // event driven: nothing to ask for
+    func refresh() { model.refreshHistory() }     // live activity is event driven; only the history catches up
 
     func chip(isOpen: Bool, action: @escaping () -> Void) -> AnyView {
         AnyView(ClaudeChip(model: model, isOpen: isOpen, action: action))

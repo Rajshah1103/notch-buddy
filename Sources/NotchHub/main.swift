@@ -99,6 +99,29 @@ if CommandLine.arguments.contains("--claude") {
     exit(0)
 }
 
+// `NotchHub --history` totals the last 90 days of Claude transcripts once (into a throwaway cache) and prints numbers only.
+if CommandLine.arguments.contains("--history") {
+    let cache = FileManager.default.temporaryDirectory.appendingPathComponent("notchhub-history-\(getpid()).json")
+    let scanner = UsageHistoryScanner(cacheURL: cache)
+    var latest = UsageHistory.empty
+    var updates = 0
+    scanner.onChange = { latest = $0; updates += 1 }
+    let began = Date()
+    scanner.start()
+    while updates < 2, Date().timeIntervalSince(began) < 300 { RunLoop.main.run(until: Date().addingTimeInterval(0.2)) }
+    let stats = UsageStats(history: latest)
+    print(String(format: "first pass: %.1fs, days with use: %d", Date().timeIntervalSince(began), latest.daily.count))
+    print("7d \(TokenFormat.short(stats.total(days: 7)))  30d \(TokenFormat.short(stats.total(days: 30)))  90d \(TokenFormat.short(stats.total(days: 90)))  streak \(stats.streak)  persona: \(stats.persona.name)")
+    print("month forecast: \(TokenFormat.short(stats.monthForecast.projected)) (so far \(TokenFormat.short(stats.monthForecast.soFar)), \(stats.monthForecast.daysLeft) days left)")
+    let again = Date()
+    scanner.refresh(maxAge: 0)
+    RunLoop.main.run(until: Date().addingTimeInterval(3))
+    print(String(format: "cache size: %d KB", ((try? FileManager.default.attributesOfItem(atPath: cache.path)[.size] as? Int) ?? 0) / 1024))
+    _ = again
+    try? FileManager.default.removeItem(at: cache)
+    exit(0)
+}
+
 // `NotchHub --github` fetches pull requests once and prints counts only.
 if CommandLine.arguments.contains("--github") {
     let done = DispatchSemaphore(value: 0)

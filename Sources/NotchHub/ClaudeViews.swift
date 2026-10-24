@@ -48,11 +48,9 @@ struct ClaudeChip: View {
 /// Claude Code sessions from the last day: what is working now and how much each used today.
 struct ClaudePanel: View {
     @ObservedObject var model: ClaudeModel
-    private let visibleRows = 8
 
     var body: some View {
         let sessions = model.snapshot.sessions
-        let shown = Array(sessions.prefix(visibleRows))
 
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
@@ -64,30 +62,30 @@ struct ClaudePanel: View {
                 }
                 .padding(.horizontal, 4)
 
-                VStack(spacing: 2) {
-                    if shown.isEmpty {
-                        Text("No Claude Code sessions found yet")
-                            .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
-                            .frame(maxWidth: .infinity).padding(.top, 40)
-                    }
-                    ForEach(shown) { session in
-                        SessionRow(session: session, isWorking: model.snapshot.working.contains(session),
-                                   needsYou: model.needsYou.contains(session)) {
-                            model.markSeen(session)
-                            ClaudeLauncher.open(session)
+                // The one list in the notch that scrolls: a day of chats can run past what fits.
+                ScrollView(.vertical) {
+                    VStack(spacing: 2) {
+                        if sessions.isEmpty {
+                            Text("No Claude Code sessions found yet")
+                                .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                                .frame(maxWidth: .infinity).padding(.top, 40)
+                        }
+                        ForEach(sessions) { session in
+                            SessionRow(session: session, isWorking: model.snapshot.working.contains(session),
+                                       needsYou: model.needsYou.contains(session)) {
+                                model.markSeen(session)
+                                ClaudeLauncher.open(session)
+                            }
                         }
                     }
-                    if sessions.count > shown.count {
-                        Text("\(sessions.count - shown.count) more")
-                            .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).frame(height: 28)
-                    }
-                    Spacer(minLength: 0)
                 }
+                .scrollIndicators(.hidden)
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0.9), .init(color: .clear, location: 1)],
+                                     startPoint: .top, endPoint: .bottom))
             }
             .frame(width: 590)
 
-            Summary(model: model).frame(width: 300)
+            Insights(model: model).frame(width: 300)
         }
     }
 }
@@ -98,6 +96,7 @@ private struct SessionRow: View {
     let needsYou: Bool
     let onOpen: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
 
     private var status: (text: String, color: Color) {
         switch (needsYou, session.attention) {
@@ -123,44 +122,24 @@ private struct SessionRow: View {
                     .foregroundStyle(status.color)
             }
             Spacer(minLength: 0)
+            if hovering {
+                Label("Open", systemImage: "arrow.up.forward.app")
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.claude)
+                    .transition(.opacity)
+            }
             Text(TokenFormat.short(session.totalTokens))
                 .font(.system(size: 12, weight: .medium).monospacedDigit())
                 .foregroundStyle(Theme.textSecondary)
         }
         .padding(.horizontal, 10)
         .frame(height: 38)
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(hovering ? Theme.fillHover : .clear))
         .contentShape(Rectangle())
+        .pointerHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.08), value: hovering)
         .onTapGesture(perform: onOpen)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Opens this chat in Ghostty")
-    }
-}
-
-private struct Summary: View {
-    @ObservedObject var model: ClaudeModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Today").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textSecondary)
-            Text(TokenFormat.short(model.snapshot.tokensToday))
-                .font(.system(size: 44, weight: .semibold, design: .rounded).monospacedDigit())
-            Text("tokens across all sessions")
-                .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
-            Divider().padding(.vertical, 6)
-            Label(model.snapshot.isWorking
-                  ? "\(model.snapshot.working.count) working now"
-                  : "Idle", systemImage: model.snapshot.isWorking ? "bolt.fill" : "moon.zzz")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(model.snapshot.isWorking ? Theme.claude : Theme.textSecondary)
-            Text("Counts new input and output. Cache re-reads are not included. Plan limits aren't stored on this Mac, so they can't be shown.")
-                .font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 4)
-            Spacer(minLength: 0)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.fillQuiet))
     }
 }

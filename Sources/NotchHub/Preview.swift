@@ -32,7 +32,7 @@ enum Preview {
         if let search { PreviewSeed.query = search; state.isSearching = true }
 
         let claude = ClaudeModel()
-        claude.loadForPreview(liveBuild || liveMeeting ? .idle : sampleClaude())
+        claude.loadForPreview(liveBuild || liveMeeting ? .idle : sampleClaude(), history: sampleHistory())
         let jenkins = JenkinsModel()
         jenkins.loadForPreview(sampleJenkins())
         AppSettings.shared.showJenkins = true      // off by default; renders show it
@@ -179,6 +179,24 @@ enum Preview {
             job("payments/build", .succeeded, number: 560, startedAgo: 9_000, finishedAgo: 8_800),
             job("mobile/release", .succeeded, number: 33, startedAgo: 40_000, finishedAgo: 39_500),
         ], fetchedAt: now)
+    }
+
+    /// 90 invented days with a weekly rhythm and a recent climb, so the insights card has something to draw.
+    private static func sampleHistory() -> UsageHistory {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        var daily: [Date: Int] = [:], chats: [Date: Int] = [:]
+        for back in 0..<90 {
+            guard let day = calendar.date(byAdding: .day, value: -back, to: today) else { continue }
+            let weekend = calendar.isDateInWeekend(day)
+            let wave = 1.0 + 0.5 * sin(Double(back) * 0.7)
+            let climb = 1.0 + Double(90 - back) / 90.0
+            daily[day] = Int(1_600_000 * wave * climb * (weekend ? 0.45 : 1.0))
+            chats[day] = 2 + (back * 7) % 6
+        }
+        var hours = Array(repeating: 200_000, count: 24)
+        for hour in 9...18 { hours[hour] = 1_200_000 }
+        return UsageHistory(daily: daily, hours: hours, chats: chats)
     }
 
     private static func sampleGmail() -> GmailSnapshot {
