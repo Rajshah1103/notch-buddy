@@ -20,12 +20,15 @@ let package = Package(
         .target(name: "CalendarKit"),
         // Unread mail from Gmail (read-only), signed in with the user's own Google Cloud OAuth client.
         .target(name: "GmailKit"),
-        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore", "ClaudeUsage", "GitHubKit", "JenkinsKit", "CalendarKit", "GmailKit"]),
+        // The buddy: moods, how the blob moves, and the rules for which event gets announced and when.
+        .target(name: "BuddyKit"),
+        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore", "ClaudeUsage", "GitHubKit", "JenkinsKit", "CalendarKit", "GmailKit", "BuddyKit"]),
         .testTarget(name: "WindowEngineTests", dependencies: ["WindowEngine"]),
         .testTarget(name: "ClaudeUsageTests", dependencies: ["ClaudeUsage"]),
         .testTarget(name: "GitHubKitTests", dependencies: ["GitHubKit"]),
         .testTarget(name: "JenkinsKitTests", dependencies: ["JenkinsKit"]),
         .testTarget(name: "CalendarKitTests", dependencies: ["CalendarKit"]),
         .testTarget(name: "GmailKitTests", dependencies: ["GmailKit"]),
+        .testTarget(name: "BuddyKitTests", dependencies: ["BuddyKit"]),
     ]
 )
