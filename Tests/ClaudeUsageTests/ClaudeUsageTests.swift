@@ -183,6 +183,57 @@ struct ChatTitleTests {
     }
 }
 
+struct UsageStatsTests {
+    private var calendar: Calendar { var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c }
+    private var now: Date { calendar.date(from: DateComponents(year: 2026, month: 10, day: 25, hour: 12))! }
+
+    /// `perDay[0]` is today, `perDay[1]` yesterday, and so on.
+    private func stats(_ perDay: [Int], hours: [Int]? = nil) -> UsageStats {
+        let today = calendar.startOfDay(for: now)
+        var daily: [Date: Int] = [:]
+        for (back, tokens) in perDay.enumerated() where tokens > 0 { daily[calendar.date(byAdding: .day, value: -back, to: today)!] = tokens }
+        return UsageStats(history: UsageHistory(daily: daily, hours: hours ?? Array(repeating: 0, count: 24), chats: [:]), now: now, calendar: calendar)
+    }
+
+    @Test func totalsAndAveragesCoverTheWindowEndingToday() {
+        let s = stats([10, 20, 30])
+        #expect(s.series(days: 3) == [30, 20, 10])
+        #expect(s.total(days: 30) == 60)
+        #expect(s.average(days: 30) == 2)
+        #expect(s.busiest(days: 30)?.tokens == 30)
+    }
+
+    @Test func streakCountsBackFromTodayOrYesterday() {
+        #expect(stats([5, 5, 5, 0, 5]).streak == 3)
+        #expect(stats([0, 5, 5]).streak == 2)      // today has not started yet
+        #expect(stats([0, 0, 5]).streak == 0)
+    }
+
+    @Test func trendComparesWithThePreviousPeriod() {
+        let s = stats(Array(repeating: 200, count: 30) + Array(repeating: 100, count: 30))
+        #expect(s.trend(days: 30) == 1.0)
+        #expect(stats(Array(repeating: 100, count: 30)).trend(days: 30) == nil)
+    }
+
+    @Test func forecastAddsTheRecentPaceForTheDaysLeft() {
+        let s = stats(Array(repeating: 100, count: 25))             // Oct 1...25, 100 a day
+        let f = s.monthForecast
+        #expect(f.soFar == 2_500)
+        #expect(f.daysLeft == 6)
+        #expect(f.projected == 2_500 + 100 * 6)
+    }
+
+    @Test func personaFollowsHabitsThenVolume() {
+        var night = Array(repeating: 0, count: 24); night[23] = 100; night[1] = 100; night[12] = 50
+        #expect(stats([100, 0, 100], hours: night).persona.name == "The Midnight Prompter")
+        #expect(stats([]).persona.name == "The Quiet Type")
+        #expect(stats([0, 9_000_000, 0, 9_000_000]).persona.name != "The Quiet Type")
+        var noon = Array(repeating: 0, count: 24); noon[12] = 100
+        #expect(stats([10_000, 0, 10_000], hours: noon).persona.name == "The Polite Prompter")
+        #expect(stats([1], hours: noon).peakHour == 12)
+    }
+}
+
 struct TokenFormatTests {
     @Test func formatsCompactly() {
         #expect(TokenFormat.short(950) == "950")

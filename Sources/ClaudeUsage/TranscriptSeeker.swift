@@ -35,18 +35,24 @@ public enum TranscriptSeeker {
         let overlap = key.count + 40        // a key or its value may straddle two chunks
         var cursor = position
         while cursor < limit {
-            guard (try? handle.seek(toOffset: cursor)) != nil,
-                  let chunk = try? handle.read(upToCount: chunkSize), !chunk.isEmpty
-            else { return nil }
-            if let found = chunk.range(of: key) {
-                let start = found.upperBound
-                if let end = chunk[start...].firstIndex(of: 0x22),
-                   let text = String(data: chunk[start..<end], encoding: .utf8), let date = formatter.date(from: text) {
-                    return (cursor + UInt64(found.lowerBound), date)
+            // Each probe reads megabytes; free them per iteration, not when the whole search ends.
+            var outcome: (position: UInt64, date: Date)??
+            autoreleasepool {
+                guard (try? handle.seek(toOffset: cursor)) != nil,
+                      let chunk = try? handle.read(upToCount: chunkSize), !chunk.isEmpty
+                else { outcome = .some(nil); return }
+                if let found = chunk.range(of: key) {
+                    let start = found.upperBound
+                    if let end = chunk[start...].firstIndex(of: 0x22),
+                       let text = String(data: chunk[start..<end], encoding: .utf8), let date = formatter.date(from: text) {
+                        outcome = .some((cursor + UInt64(found.lowerBound), date))
+                        return
+                    }
                 }
+                if chunk.count < chunkSize { outcome = .some(nil); return }
+                cursor += UInt64(chunk.count - overlap)
             }
-            if chunk.count < chunkSize { return nil }
-            cursor += UInt64(chunk.count - overlap)
+            if let outcome { return outcome }
         }
         return nil
     }

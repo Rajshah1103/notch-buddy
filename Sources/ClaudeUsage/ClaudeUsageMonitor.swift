@@ -94,8 +94,11 @@ public final class ClaudeUsageMonitor: @unchecked Sendable {
         var position = offset!
         var carry = Data()                       // an unfinished last line, completed by the next chunk
         var lines: [TranscriptLine] = []
-        while let chunk = try? handle.read(upToCount: 4 << 20), !chunk.isEmpty {
+        var reading = true
+        while reading {
+            // The read itself sits inside the pool: its buffer is autoreleased, and a day can be hundreds of MB.
             autoreleasepool {
+                guard let chunk = try? handle.read(upToCount: 4 << 20), !chunk.isEmpty else { reading = false; return }
                 let buffer = carry + chunk
                 guard let newline = buffer.lastIndex(of: 0x0A) else { carry = buffer; return }
                 let complete = buffer.prefix(through: newline)
