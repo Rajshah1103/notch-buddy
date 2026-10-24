@@ -22,6 +22,7 @@ private final class NotchController {
     private let outline = CAShapeLayer()     // masks the material and content to the notch shape
     private let edge = CAShapeLayer()        // hairline that defines the shape on any wallpaper
     private let panelSize: CGSize
+    private var rootView: NSView?
     private let screen: NSScreen
     private var collapseWork: DispatchWorkItem?
     private var wasInPrefetchZone = false
@@ -115,7 +116,7 @@ private final class NotchController {
 
         // The window grows and shrinks (and hides) around fixed-size content, which stays pinned to the
         // top centre, so resizing the window never makes SwiftUI lay anything out again.
-        root.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
+        root.autoresizingMask = []        // positioned by `place`; autoresizing left it off to one side
         let wrapper = NSView(frame: bounds)
         wrapper.addSubview(root)
 
@@ -127,7 +128,8 @@ private final class NotchController {
         root.layer?.addSublayer(edge)
 
         panel.contentView = wrapper
-        panel.setFrame(NSRect(x: geometry.panelFrame.midX - 1, y: geometry.panelFrame.maxY - 2, width: 2, height: 2), display: false)
+        rootView = root
+        place(NSRect(x: geometry.panelFrame.midX - 1, y: geometry.panelFrame.maxY - 2, width: 2, height: 2))
         panel.orderFrontRegardless()
         state.collapseHandler = { [weak self] in self?.collapse() }
         state.searchHandler = { [weak self] on in self?.setSearching(on) }
@@ -277,6 +279,15 @@ private final class NotchController {
 
     // MARK: - Window at rest
 
+    /// Resizes the window and pins the fixed-size content to its top centre. This is done by hand: the
+    /// window shrinks to a tiny frame and back, and autoresizing masks drifted the content sideways,
+    /// which left the collapsed notch and its ears drawn outside the window (so nothing showed).
+    private func place(_ frame: NSRect) {
+        panel.setFrame(frame, display: false)
+        rootView?.frame = NSRect(x: (frame.width - panelSize.width) / 2, y: frame.height - panelSize.height,
+                                 width: panelSize.width, height: panelSize.height)
+    }
+
     /// The small window that covers the collapsed pill and its live ears.
     private func liveFrame() -> NSRect {
         let g = state.geometry
@@ -294,7 +305,7 @@ private final class NotchController {
     private func showForExpansion() {
         restingWork?.cancel(); restingWork = nil
         let began = CACurrentMediaTime()
-        panel.setFrame(state.geometry.panelFrame, display: false)
+        place(state.geometry.panelFrame)
         material.isHidden = false
         panel.orderFrontRegardless()
         trace?("window shown (took \(Int((CACurrentMediaTime() - began) * 1000)) ms on the main thread)")
@@ -309,7 +320,7 @@ private final class NotchController {
             self.material.isHidden = true
             // Never ordered out: bringing a hidden window back on screen takes the system ~170 ms, which
             // is felt as the notch opening late. A 2-point window costs nothing and resizes instantly.
-            self.panel.setFrame(self.liveExtra > 0 ? self.liveFrame() : self.sliverFrame(), display: false)
+            self.place(self.liveExtra > 0 ? self.liveFrame() : self.sliverFrame())
             self.panel.orderFrontRegardless()
         }
         restingWork = work
@@ -367,7 +378,7 @@ private final class NotchController {
         guard !state.isExpanded else { return }   // takes effect when the notch next collapses
         if extra > 0 {
             restingWork?.cancel(); restingWork = nil
-            panel.setFrame(liveFrame(), display: false)
+            place(liveFrame())
             panel.orderFrontRegardless()
         } else {
             scheduleResting(after: 0.45)          // let the pill finish shrinking, then hide
