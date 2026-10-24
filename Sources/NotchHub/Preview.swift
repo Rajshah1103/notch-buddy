@@ -1,4 +1,5 @@
 import AppKit
+import BuddyKit
 import CalendarKit
 import ClaudeUsage
 import GmailKit
@@ -96,6 +97,30 @@ enum Preview {
         host.cacheDisplay(in: host.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
         print("Wrote \(path)")
+    }
+
+    /// Every buddy mood on black, at 3x, with its label and tint.
+    static func renderBuddySheet(to path: String) {
+        _ = NSApplication.shared
+        let tints: [Mood: Color] = [.sleepy: Color(white: 0.7), .working: Theme.claude, .thinking: Theme.claude, .needsYou: Theme.claude,
+                                    .happy: .green, .proud: .green, .sad: .red, .excited: Color(red: 0.92, green: 0.3, blue: 0.25),
+                                    .alert: .purple, .clockWatching: Theme.accent, .shocked: .red]
+        let grid = HStack(alignment: .top, spacing: 18) {
+            ForEach(Array(Mood.allCases.enumerated()), id: \.offset) { _, mood in
+                VStack(spacing: 8) {
+                    BuddyView(mood: mood, tint: tints[mood] ?? .orange, size: 64, fixedTime: 0.6)
+                    BuddyView(mood: mood, tint: tints[mood] ?? .orange, size: 22, fixedTime: 0.6)
+                    Text(mood.label).font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.7))
+                }
+            }
+        }
+        .padding(24).background(Color.black)
+        let renderer = ImageRenderer(content: grid)
+        renderer.scale = 3
+        if let image = renderer.nsImage, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+            print("Wrote \(path)")
+        }
     }
 
     /// Renders the Settings or Welcome window content offscreen.
