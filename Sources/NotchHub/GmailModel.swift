@@ -17,6 +17,11 @@ final class GmailModel: ObservableObject {
     @Published private(set) var snapshot: GmailSnapshot?
     @Published private(set) var error: GmailError?
 
+    /// What was typed into the setup fields. Kept here, not in the view: the notch closes whenever you
+    /// click away (to copy the next value from Google's page), and the view's own state goes with it.
+    @Published var draftClientID = ""
+    @Published var draftSecret = ""
+
     private let client = GmailClient()
     private var credentials: GmailCredentials?
     private var access: (token: String, expires: Date)?
@@ -59,10 +64,24 @@ final class GmailModel: ObservableObject {
 
     // MARK: - Connecting
 
+    /// Accepts the JSON file Google offers to download for a client (`{"installed":{"client_id":…,"client_secret":…}}`),
+    /// so one paste fills both fields. Returns false when the text is not that.
+    @discardableResult
+    func absorb(pasted text: String) -> Bool {
+        guard let data = text.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let inner = (root["installed"] ?? root["web"] ?? root) as? [String: Any],
+              let id = inner["client_id"] as? String else { return false }
+        draftClientID = id
+        if let secret = inner["client_secret"] as? String { draftSecret = secret }
+        return true
+    }
+
     func saveClient(id: String, secret: String) {
         let saved = GmailCredentials(clientID: id.trimmingCharacters(in: .whitespacesAndNewlines),
                                      clientSecret: secret.trimmingCharacters(in: .whitespacesAndNewlines))
         credentials = saved
+        draftClientID = ""; draftSecret = ""
         Task.detached { saved.save() }
         signIn()
     }

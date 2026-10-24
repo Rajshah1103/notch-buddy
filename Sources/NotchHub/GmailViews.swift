@@ -145,22 +145,25 @@ private struct MessageRow: View {
 private struct Setup: View {
     @ObservedObject var model: GmailModel
     let notch: NotchState
-    @State private var clientID = ""
-    @State private var secret = ""
     @FocusState private var focused: Bool
 
-    private var ready: Bool { !clientID.trimmingCharacters(in: .whitespaces).isEmpty && !secret.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var ready: Bool {
+        !model.draftClientID.trimmingCharacters(in: .whitespaces).isEmpty
+            && !model.draftSecret.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "envelope").font(.system(size: 30, weight: .light)).foregroundStyle(Theme.textSecondary)
             Text("Connect Gmail").font(.system(size: 17, weight: .semibold))
-            Text("See your newest unread mail from the notch. Paste the Client ID and secret of a \u{201C}Desktop app\u{201D} OAuth client from your own Google Cloud project. They stay in your Keychain, and the app can only read.")
+            Text("See your newest unread mail from the notch. Paste the Client ID and secret of a \u{201C}Desktop app\u{201D} OAuth client from your own Google Cloud project, or paste the JSON file Google lets you download to fill both at once. They stay in your Keychain, and the app can only read.")
                 .font(.system(size: 12)).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center)
                 .frame(maxWidth: 540)
             VStack(spacing: 8) {
-                TextField("Client ID", text: $clientID).textFieldStyle(.roundedBorder).focused($focused)
-                SecureField("Client secret", text: $secret).textFieldStyle(.roundedBorder).onSubmit(connect)
+                TextField("Client ID", text: $model.draftClientID).textFieldStyle(.roundedBorder).focused($focused)
+                    // Pasting Google's downloaded JSON here fills both fields at once.
+                    .onChange(of: model.draftClientID) { _, text in if text.contains("{") { model.absorb(pasted: text) } }
+                SecureField("Client secret", text: $model.draftSecret).textFieldStyle(.roundedBorder).onSubmit(connect)
             }
             .frame(width: 420)
             HStack(spacing: 14) {
@@ -183,8 +186,7 @@ private struct Setup: View {
 
     private func connect() {
         guard ready else { return }
-        model.saveClient(id: clientID, secret: secret)
-        secret = ""
+        model.saveClient(id: model.draftClientID, secret: model.draftSecret)
     }
 }
 
