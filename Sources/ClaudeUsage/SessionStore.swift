@@ -6,6 +6,7 @@ public final class SessionStore {
 
     private struct File {
         var cwd: String?
+        var title: String?
         var messages: [String: Message] = [:]   // by message id: streamed updates replace, never double count
         var lastWrite: Date
         var burstStart: Date
@@ -23,14 +24,15 @@ public final class SessionStore {
     }
 
     /// `fileID` is the transcript's file name (the session id); `modified` is when it was last written.
-    public func ingest(fileID: String, folder: String? = nil, lines: [TranscriptLine], modified: Date) {
-        var file = files[fileID] ?? File(cwd: nil, lastWrite: modified, burstStart: modified)
+    public func ingest(fileID: String, folder: String? = nil, title: String? = nil, lines: [TranscriptLine], modified: Date) {
+        var file = files[fileID] ?? File(cwd: nil, title: nil, lastWrite: modified, burstStart: modified)
 
         // A new stretch of work begins when the transcript had been quiet for longer than the window.
         if modified.timeIntervalSince(file.lastWrite) > workingWindow { file.burstStart = modified }
         file.lastWrite = max(file.lastWrite, modified)
 
         if let folder { file.cwd = folder }
+        if let title { file.title = title }
         for line in lines {
             if let cwd = line.cwd { file.cwd = cwd }
             if let id = line.messageID {
@@ -60,7 +62,8 @@ public final class SessionStore {
                 project: file.cwd.map { ($0 as NSString).lastPathComponent } ?? "Claude",
                 lastActivity: file.lastWrite,
                 inputTokens: todays.reduce(0) { $0 + $1.input },
-                outputTokens: todays.reduce(0) { $0 + $1.output })
+                outputTokens: todays.reduce(0) { $0 + $1.output },
+                title: file.title, cwd: file.cwd)
             sessions.append(session)
             if current.timeIntervalSince(file.lastWrite) < workingWindow {
                 working.append(session)

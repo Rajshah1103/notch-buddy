@@ -105,6 +105,34 @@ struct TranscriptSeekerTests {
     }
 }
 
+struct ChatTitleTests {
+    private func data(_ text: String) -> Data { Data(text.utf8) }
+
+    @Test func takesTheLastTitleAndUnescapesIt() {
+        let log = data(#"{"aiTitle":"Old"}"# + "\n" + #"{"aiTitle":"New \"quoted\" name"}"# + "\n")
+        #expect(TranscriptSeeker.lastValue(of: "aiTitle", in: log) == #"New "quoted" name"#)
+    }
+
+    @Test func ignoresEscapedCopiesInsideMessageText() {
+        let log = data(#"{"aiTitle":"Real"}"# + "\n" + #"{"text":"\"aiTitle\":\"fake\""}"# + "\n")
+        #expect(TranscriptSeeker.lastValue(of: "aiTitle", in: log) == "Real")
+    }
+
+    @Test func emptyOrMissingTitlesAreNil() {
+        #expect(TranscriptSeeker.lastValue(of: "aiTitle", in: data(#"{"aiTitle":""}"#)) == nil)
+        #expect(TranscriptSeeker.lastValue(of: "agentName", in: data(#"{"aiTitle":"x"}"#)) == nil)
+    }
+
+    @Test func sessionsShowTheTitleThenTheFolder() {
+        let store = SessionStore()
+        store.ingest(fileID: "a", folder: "/work/api", title: "Fix login bug", lines: [], modified: Date())
+        store.ingest(fileID: "b", folder: "/work/web", lines: [], modified: Date())
+        let names = Dictionary(uniqueKeysWithValues: store.snapshot().sessions.map { ($0.id, $0.displayName) })
+        #expect(names["a"] == "Fix login bug")
+        #expect(names["b"] == "web")
+    }
+}
+
 struct TokenFormatTests {
     @Test func formatsCompactly() {
         #expect(TokenFormat.short(950) == "950")

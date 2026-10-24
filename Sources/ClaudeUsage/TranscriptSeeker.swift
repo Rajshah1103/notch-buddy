@@ -73,4 +73,31 @@ public enum TranscriptSeeker {
         guard let end = head[start...].firstIndex(of: 0x22) else { return nil }
         return String(data: head[start..<end], encoding: .utf8)
     }
+
+    /// The chat's name from the end of its transcript: a `/rename` (agentName) beats the title Claude
+    /// Code generated (aiTitle). Both are re-written every turn, so the last one in the tail is current.
+    public static func title(inTailOf handle: FileHandle, size: UInt64, tail: UInt64 = 1 << 20) -> String? {
+        let start = size > tail ? size - tail : 0
+        guard (try? handle.seek(toOffset: start)) != nil, let data = try? handle.read(upToCount: Int(tail)) else { return nil }
+        return lastValue(of: "agentName", in: data) ?? lastValue(of: "aiTitle", in: data)
+    }
+
+    /// The last `"key":"value"` in `data`, unescaped. Escaped copies inside message text do not match.
+    static func lastValue(of key: String, in data: Data) -> String? {
+        let needle = Data("\"\(key)\":\"".utf8)
+        var searchEnd = data.endIndex
+        while let hit = data.range(of: needle, options: .backwards, in: data.startIndex..<searchEnd) {
+            let begin = hit.upperBound
+            var i = begin
+            while i < data.endIndex, data[i] != 0x22 { i += data[i] == 0x5C ? 2 : 1 }   // skip \" and \\
+            if i < data.endIndex,
+               let text = try? JSONSerialization.jsonObject(with: Data([0x22]) + data[begin..<i] + Data([0x22]),
+                                                            options: .fragmentsAllowed) as? String,
+               !text.isEmpty {
+                return text
+            }
+            searchEnd = hit.lowerBound
+        }
+        return nil
+    }
 }

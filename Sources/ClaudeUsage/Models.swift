@@ -7,10 +7,19 @@ public struct ClaudeSession: Identifiable, Hashable {
     public let lastActivity: Date
     public let inputTokens: Int
     public let outputTokens: Int
+    /// The chat's name: its /rename, else the title Claude Code generated. Nil when it has none yet.
+    public let title: String?
+    /// Full working folder, for reopening the chat.
+    public let cwd: String?
 
+    /// What to call the chat in the UI.
+    public var displayName: String { title ?? project }
     public var totalTokens: Int { inputTokens + outputTokens }
 
-    public init(id: String, project: String, lastActivity: Date, inputTokens: Int, outputTokens: Int) {
+    public init(id: String, project: String, lastActivity: Date, inputTokens: Int, outputTokens: Int,
+                title: String? = nil, cwd: String? = nil) {
+        self.title = title
+        self.cwd = cwd
         self.id = id
         self.project = project
         self.lastActivity = lastActivity

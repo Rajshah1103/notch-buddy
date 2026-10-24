@@ -70,8 +70,10 @@ public final class ClaudeUsageMonitor: @unchecked Sendable {
     private func register(_ file: URL, modified: Date) {
         guard let handle = try? FileHandle(forReadingFrom: file) else { return }
         defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
         store.ingest(fileID: file.deletingPathExtension().lastPathComponent,
-                     folder: TranscriptSeeker.folder(inHeadOf: handle), lines: [], modified: modified)
+                     folder: TranscriptSeeker.folder(inHeadOf: handle),
+                     title: TranscriptSeeker.title(inTailOf: handle, size: size), lines: [], modified: modified)
     }
 
     /// Reads what was appended since last time; on a first read, starts at the beginning of `since`.
@@ -102,8 +104,11 @@ public final class ClaudeUsageMonitor: @unchecked Sendable {
                 lines += TranscriptLines.parse(complete)
             }
         }
+        let grew = position > (offsets[file.path] ?? 0)
         offsets[file.path] = position
-        store.ingest(fileID: id, lines: lines, modified: modified)
+        // Titles are rewritten each turn, so a smaller tail than at launch is enough to stay current.
+        let title = grew ? TranscriptSeeker.title(inTailOf: handle, size: size, tail: 256 << 10) : nil
+        store.ingest(fileID: id, title: title, lines: lines, modified: modified)
     }
 
     // MARK: - Watching
