@@ -121,6 +121,7 @@ final class WindowsModel: ObservableObject {
         for pid in pids {
             if let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier { bundleIDs[pid] = id }
         }
+        bundleIDs.merge(previewBundleIDs) { _, preview in preview }
         var rebuilt = AppGroupBuilder.build(
             snapshot: snapshot, browsers: browserWindows, bundleIDs: bundleIDs, recents: recents,
             frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier)
@@ -310,6 +311,8 @@ final class WindowsModel: ObservableObject {
 
     /// For the snapshot tool: an icon for an invented app.
     func setPreviewIcon(_ image: NSImage, for pid: Int32) { icons[pid] = image }
+    private var previewBundleIDs: [Int32: String] = [:]
+    func setPreviewBundleID(_ id: String, for pid: Int32) { previewBundleIDs[pid] = id }
 
     /// For the snapshot tool: load data directly.
     /// For design renders: pretend this tab was last in front a few minutes ago.

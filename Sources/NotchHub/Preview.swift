@@ -16,11 +16,11 @@ enum Preview {
     static func render(to path: String, demo: Bool, app: String?, light: Bool, search: String?, manyApps: Int = 0,
                        claudePanel: Bool = false, githubPanel: Bool = false, githubConnect: Bool = false,
                        jenkinsPanel: Bool = false, calendarPanel: Bool = false, live: Bool = false, liveBuild: Bool = false, liveMeeting: Bool = false, tabShot: Bool = false,
-                       gmailPanel: Bool = false, gmailSetup: Bool = false, demoMoment: String? = nil) {
+                       gmailPanel: Bool = false, gmailSetup: Bool = false, demoMoment: String? = nil, tabTitle: String? = nil) {
         _ = NSApplication.shared
 
-        var snapshot = SystemWindowProvider().snapshot()
-        if demo { snapshot = withSampleTitles(snapshot) }
+        var snapshot = PreviewSeed.film ? FilmData.snapshot() : SystemWindowProvider().snapshot()
+        if demo && !PreviewSeed.film { snapshot = withSampleTitles(snapshot) }
         for n in 0..<manyApps {      // invented apps, to see how the app row copes with a crowd
             snapshot.windowlessApps.append(AppRecord(pid: Int32(900_000 + n), name: "App \(n + 1)", bundleURL: nil))
         }
@@ -65,9 +65,13 @@ enum Preview {
                 model.setPreviewIcon(image, for: Int32(900_000 + n))
             }
         }
+        if PreviewSeed.film {
+            for (pid, icon) in FilmData.icons() { model.setPreviewIcon(icon, for: pid) }
+            for (pid, id) in FilmData.bundleIDs { model.setPreviewBundleID(id, for: pid) }
+        }
         model.loadForPreview(snapshot, browsers: demo ? sampleBrowsers(snapshot) : [:], frontApp: app)
         if tabShot {
-            let title = "Inbox (12) — raj@acme.com"
+            let title = tabTitle ?? "Inbox (12) — you@acme.com"
             PreviewSeed.hoverTitle = title
             model.rememberForPreview(sampleTabImage(), tabTitle: title, minutesAgo: 3)
         }
@@ -80,19 +84,20 @@ enum Preview {
 
         let root = SwitcherView(model: model, hub: hub, web: web, learning: LearningStore(),
                                 live: LiveActivityModel(claude: claude, jenkins: jenkins, calendar: calendar), notch: state)
-            .frame(width: size.width, height: size.height)
+            .frame(width: size.width, height: size.height, alignment: .top)
             // Stand-in for the system material, which only exists inside a real window.
             .background(
                 UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28, style: .continuous)
-                    .fill(light ? Color(white: 0.96, opacity: 0.94) : Color(white: 0.17, opacity: 0.94)))
-            .padding(40)
-            .background(LinearGradient(colors: light ? [Color(red: 0.62, green: 0.74, blue: 0.9), Color(red: 0.85, green: 0.8, blue: 0.9)]
+                    .fill(light ? Color(white: 0.96, opacity: 0.94) : PreviewSeed.film ? Color(white: 0.085) : Color(white: 0.17, opacity: 0.94)))
+            .padding(PreviewSeed.film ? 0 : 40)
+            .background(PreviewSeed.film ? AnyView(Color.clear) : AnyView(LinearGradient(colors: light ? [Color(red: 0.62, green: 0.74, blue: 0.9), Color(red: 0.85, green: 0.8, blue: 0.9)]
                                                       : [Color(red: 0.12, green: 0.16, blue: 0.3), Color(red: 0.25, green: 0.12, blue: 0.3)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing))
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)))
             .environment(\.colorScheme, light ? .light : .dark)
 
         let host = NSHostingView(rootView: root)
-        host.frame = NSRect(x: 0, y: 0, width: size.width + 80, height: size.height + 80)
+        let inset: CGFloat = PreviewSeed.film ? 0 : 80
+        host.frame = NSRect(x: 0, y: 0, width: size.width + inset, height: size.height + inset)
         host.layoutSubtreeIfNeeded()
         // Let SwiftUI settle state set in onAppear before capturing.
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
@@ -162,10 +167,10 @@ enum Preview {
             .frame(width: size.width, height: size.height, alignment: .top)
             .background(UnevenRoundedRectangle(bottomLeadingRadius: moment == nil ? 12 : 24, bottomTrailingRadius: moment == nil ? 12 : 24, style: .continuous)
                 .fill(Color.black))
-            .padding(.horizontal, 30).padding(.bottom, 20)
-            .frame(width: size.width + 60, alignment: .top)
-            .background(LinearGradient(colors: [Color(red: 0.12, green: 0.16, blue: 0.3), Color(red: 0.25, green: 0.12, blue: 0.3)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing))
+            .padding(.horizontal, PreviewSeed.film ? 0 : 30).padding(.bottom, PreviewSeed.film ? 0 : 20)
+            .frame(width: size.width + (PreviewSeed.film ? 0 : 60), alignment: .top)
+            .background(PreviewSeed.film ? AnyView(Color.clear) : AnyView(LinearGradient(colors: [Color(red: 0.12, green: 0.16, blue: 0.3), Color(red: 0.25, green: 0.12, blue: 0.3)],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)))
             .environment(\.colorScheme, .dark)
         let renderer = ImageRenderer(content: pill)
         renderer.scale = 3
@@ -186,8 +191,9 @@ enum Preview {
             case "review": return Moment(id: "demo", source: .github, mood: .alert, headline: "review pls", detail: "api #482 \u{00B7} Add retry to webhooks", symbol: "arrow.triangle.pull", panel: "github")
             case "checks-bad": return Moment(id: "demo", source: .github, mood: .shocked, headline: "your checks failed", detail: "api #479 \u{00B7} Fix pagination", symbol: "arrow.triangle.pull", panel: "github")
             case "meeting": return Moment(id: "demo", source: .calendar, mood: .clockWatching, headline: "meeting in 4m", detail: "Design sync", symbol: "calendar", actionTitle: "Join", panel: "calendar")
-            case "claude-done": return Moment(id: "demo", source: .claude, mood: .happy, headline: "ate that", detail: "Add chat names to the notch", symbol: "sparkle", panel: "claude")
-            case "claude-approve": return Moment(id: "demo", source: .claude, mood: .needsYou, headline: "needs ur ok", detail: "Add chat names to the notch", symbol: "sparkle", panel: "claude")
+            case "meeting-now": return Moment(id: "demo", source: .calendar, mood: .clockWatching, headline: "starts now", detail: "Design sync", symbol: "calendar", actionTitle: "Join", panel: "calendar")
+            case "claude-done": return Moment(id: "demo", source: .claude, mood: .happy, headline: "ate that", detail: "Add retry to webhooks", symbol: "sparkle", panel: "claude")
+            case "claude-approve": return Moment(id: "demo", source: .claude, mood: .needsYou, headline: "needs ur ok", detail: "Add retry to webhooks", symbol: "sparkle", panel: "claude")
             default: return nil
             }
         }
@@ -265,9 +271,9 @@ enum Preview {
     private static func sampleClaude() -> ClaudeSnapshot {
         let now = Date()
         let sessions = [
-            ClaudeSession(id: "1", project: "notch-hub", lastActivity: now, inputTokens: 91_000, outputTokens: 61_200, title: "Add chat names to the notch"),
-            ClaudeSession(id: "2", project: "after-click", lastActivity: now.addingTimeInterval(-540), inputTokens: 40_100, outputTokens: 22_300, title: "Fix pricing page layout", attention: .approval),
-            ClaudeSession(id: "3", project: "podyard", lastActivity: now.addingTimeInterval(-7_400), inputTokens: 18_000, outputTokens: 9_400, attention: .finished),
+            ClaudeSession(id: "1", project: PreviewSeed.film ? "api-gateway" : "notch-hub", lastActivity: now, inputTokens: 91_000, outputTokens: 61_200, title: PreviewSeed.film ? "Add retry to webhooks" : "Add chat names to the notch"),
+            ClaudeSession(id: "2", project: PreviewSeed.film ? "web-app" : "after-click", lastActivity: now.addingTimeInterval(-540), inputTokens: 40_100, outputTokens: 22_300, title: "Fix pricing page layout", attention: .approval),
+            ClaudeSession(id: "3", project: PreviewSeed.film ? "billing" : "podyard", lastActivity: now.addingTimeInterval(-7_400), inputTokens: 18_000, outputTokens: 9_400, title: PreviewSeed.film ? "Migrate invoices to v2" : nil, attention: .finished),
         ]
         return ClaudeSnapshot(sessions: sessions, working: [sessions[0]], tokensToday: 682_490, workingSince: now.addingTimeInterval(-84))
     }
@@ -278,7 +284,7 @@ enum Preview {
             .filter { $0.appName == "Google Chrome" }.sorted { $0.order < $1.order }
         let sets: [[(String, String)]] = [
             [("Pull request #482 · api-gateway", "https://github.com/acme/api/pull/482"),
-             ("Inbox (12) — raj@acme.com", "https://mail.google.com/mail/u/0/"),
+             ("Inbox (12) — you@acme.com", "https://mail.google.com/mail/u/0/"),
              ("Grafana · p99 latency", "https://grafana.acme.dev/d/latency"),
              ("Jenkins · deploy-prod #318", "https://jenkins.acme.dev/job/deploy-prod/318"),
              ("Roadmap — Notion", "https://www.notion.so/roadmap")],

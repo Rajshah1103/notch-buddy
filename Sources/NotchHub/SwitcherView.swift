@@ -174,6 +174,8 @@ enum PreviewSeed {
     nonisolated(unsafe) static var integration: String?
     /// Title of an entry to show in the preview pane as if hovered.
     nonisolated(unsafe) static var hoverTitle: String?
+    /// Film stills: invented windows, transparent backdrop (see Film.swift).
+    nonisolated(unsafe) static var film = false
 }
 
 enum Layout {
