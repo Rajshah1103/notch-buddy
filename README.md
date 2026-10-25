@@ -93,3 +93,7 @@ signing (`security add-trusted-cert -r trustRoot -p codeSign ...`). With a Devel
     NOTCHHUB_PERF=1 NotchHub                 log main-thread stalls and slow background reads
 
 Tests use Swift Testing and need full Xcode to run (`swift test`).
+
+### Launch film
+
+`scripts/film.sh <work> <audio> <out> [binary]` renders the X videos offscreen from invented data (no screen recording, no real windows or accounts): `--film-still <name> out.png` draws the real views on a transparent background, `--film-frames <stills> <out> <scene|all> <16x9|1x1>` composes every frame as a pure function of time, and ffmpeg assembles the clips and the hero cut. Narration mp3s per scene go in `<audio>`.
