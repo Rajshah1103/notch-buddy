@@ -214,6 +214,19 @@ if let flag = CommandLine.arguments.firstIndex(of: "--buddy-sheet"), flag + 1 < 
     exit(0)
 }
 
+// `NotchHub --film-still <name> out.png` renders one transparent still for the launch film (see Film.swift).
+if let flag = CommandLine.arguments.firstIndex(of: "--film-still"), flag + 2 < CommandLine.arguments.count {
+    MainActor.assumeIsolated { Film.renderStill(CommandLine.arguments[flag + 1], to: CommandLine.arguments[flag + 2]) }
+    exit(0)
+}
+
+// `NotchHub --film-frames <stills> <out> <scene|all> <16x9|1x1> [fps]` composes the film frames from the stills.
+if let flag = CommandLine.arguments.firstIndex(of: "--film-frames"), flag + 4 < CommandLine.arguments.count {
+    let a = CommandLine.arguments
+    MainActor.assumeIsolated { FilmComposer.render(stills: a[flag + 1], out: a[flag + 2], scene: a[flag + 3], aspect: a[flag + 4], fps: flag + 5 < a.count ? Int(a[flag + 5]) ?? 30 : 30) }
+    exit(0)
+}
+
 if let flag = CommandLine.arguments.firstIndex(of: "--snapshot"), flag + 1 < CommandLine.arguments.count {
     MainActor.assumeIsolated {
         let args = CommandLine.arguments
