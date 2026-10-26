@@ -95,3 +95,86 @@ struct MomentQueueTests {
         #expect(q.nextWake(now: t0) == t0.addingTimeInterval(4))
     }
 }
+
+struct AnticTests {
+    @Test func everyAnticStaysBoundedAndEndsAtRest() {
+        for antic in Antic.allCases {
+            let rest = antic == .peek ? Antic.hiddenDX : 0
+            for step in 0...200 {
+                let t = antic.duration * Double(step) / 200
+                let f = antic.frame(at: t, travel: 6)
+                #expect(f.pose.scaleX > 0.6 && f.pose.scaleX < 1.4)
+                #expect(f.pose.scaleY > 0.6 && f.pose.scaleY < 1.4)
+                #expect(abs(f.pose.lift) < 0.3)
+                #expect(f.dx >= -0.5 && f.dx <= 6)
+                #expect(f.captionOpacity >= 0 && f.captionOpacity <= 1)
+            }
+            let first = antic.frame(at: 0), last = antic.frame(at: antic.duration)
+            #expect(abs(first.dx - rest) < 0.001 && abs(last.dx - rest) < 0.001)
+            #expect(first.roll.truncatingRemainder(dividingBy: 360) == 0 && last.roll.truncatingRemainder(dividingBy: 360) == 0)
+            #expect(first.captionOpacity == 0 && last.captionOpacity == 0)
+        }
+    }
+
+    @Test func captionsAreShortAndNeverEmpty() {
+        for antic in Antic.allCases {
+            for caption in antic.captions {
+                let words = caption.split(separator: " ").count
+                #expect(words >= 1 && words <= 4)
+            }
+        }
+    }
+}
+
+struct IdleDirectorTests {
+    private func director() -> IdleDirector {
+        var d = IdleDirector(seed: 7)
+        d.firstDelay = 60...60
+        d.gap = 100...100
+        return d
+    }
+
+    @Test func firstCameoWaitsThenGapsApply() {
+        var d = director()
+        #expect(d.update(now: 0, isIdle: true, userIdle: 1) == .rest)
+        #expect(d.update(now: 59, isIdle: true, userIdle: 1) == .rest)
+        guard case .play(let first, _) = d.update(now: 60, isIdle: true, userIdle: 1) else { return Issue.record("no cameo") }
+        #expect(Antic.cameos.contains(first))
+        #expect(d.update(now: 60 + first.duration + 99, isIdle: true, userIdle: 1) == .rest)
+        guard case .play(let second, _) = d.update(now: 60 + first.duration + 100, isIdle: true, userIdle: 1) else { return Issue.record("no second cameo") }
+        #expect(second != first)
+    }
+
+    @Test func neverRepeatsAnAnticBackToBack() {
+        var d = director()
+        var last: Antic?
+        var now = 0.0
+        for _ in 0..<60 {
+            now += 400
+            if case .play(let a, _) = d.update(now: now, isIdle: true, userIdle: 1) {
+                #expect(a != last)
+                last = a
+            }
+        }
+    }
+
+    @Test func anythingElseOwningTheNotchRestartsTheWait() {
+        var d = director()
+        _ = d.update(now: 0, isIdle: true, userIdle: 1)
+        #expect(d.update(now: 50, isIdle: false, userIdle: 1) == .rest)
+        #expect(d.update(now: 70, isIdle: true, userIdle: 1) == .rest)        // the wait starts over at 70
+        #expect(d.update(now: 129, isIdle: true, userIdle: 1) == .rest)
+        #expect(d.update(now: 130, isIdle: true, userIdle: 1) != .rest)
+    }
+
+    @Test func napsAfterALongBreakAndWavesOnceOnReturn() {
+        var d = director()
+        _ = d.update(now: 0, isIdle: true, userIdle: 1)
+        guard case .play(let nap, _) = d.update(now: 30, isIdle: true, userIdle: 600) else { return Issue.record("no nap") }
+        #expect(nap == .nap)
+        #expect(d.update(now: 40, isIdle: true, userIdle: 610) == .rest)      // stays tucked while asleep
+        guard case .play(let wake, _) = d.update(now: 50, isIdle: true, userIdle: 2) else { return Issue.record("no wave") }
+        #expect(wake == .wakeWave)
+        #expect(d.update(now: 52, isIdle: true, userIdle: 3) == .rest)        // only once
+    }
+}
