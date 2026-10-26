@@ -1,5 +1,4 @@
 import AppKit
-import ApplicationServices
 import WindowEngine
 
 @MainActor
@@ -322,23 +321,9 @@ final class WindowsModel: ObservableObject {
         return snapshot.spaces.first(where: \.isCurrent)?.id != home.id
     }
 
-    /// Takes you to the bare desktop, like the trackpad's spread: first to the first Desktop if you are in a
-    /// full-screen app or on another one, then every other app is hidden so only the wallpaper is left. Nothing
-    /// is closed; an app comes back the moment you open it from the Dock, the notch or search.
+    /// Jumps straight to the first Desktop, with no swipe animation. Nothing is hidden, closed or moved.
     func goHome() {
-        if canGoHome, let home = homeSpace { provider.switchTo(home) }
-        let me = ProcessInfo.processInfo.processIdentifier
-        let pids = NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular && !$0.isHidden && $0.processIdentifier != me }
-            .map(\.processIdentifier)
-        // Some apps (Chrome) ignore NSRunningApplication.hide() but honour the Accessibility "hidden" attribute.
-        DispatchQueue.global(qos: .userInitiated).async {
-            for pid in pids {
-                let app = AXUIElementCreateApplication(pid)
-                AXUIElementSetMessagingTimeout(app, 0.3)
-                AXUIElementSetAttributeValue(app, kAXHiddenAttribute as CFString, kCFBooleanTrue)
-            }
-        }
+        if let home = homeSpace { provider.switchTo(home) }
     }
 
     /// For the snapshot tool: an icon for an invented app.
