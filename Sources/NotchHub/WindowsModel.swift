@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import WindowEngine
 
 @MainActor
@@ -321,24 +322,23 @@ final class WindowsModel: ObservableObject {
         return snapshot.spaces.first(where: \.isCurrent)?.id != home.id
     }
 
-    /// Takes you to the desktop. From a full-screen app or another Desktop it jumps to the first Desktop; once
-    /// you are on it, it does what the trackpad's spread gesture does: slides every window aside to show the
-    /// wallpaper, and brings them back when pressed again. Nothing is closed, hidden or moved for good.
+    /// Takes you to the bare desktop, like the trackpad's spread: first to the first Desktop if you are in a
+    /// full-screen app or on another one, then every other app is hidden so only the wallpaper is left. Nothing
+    /// is closed; an app comes back the moment you open it from the Dock, the notch or search.
     func goHome() {
-        if canGoHome, let home = homeSpace {
-            provider.switchTo(home)
-        } else {
-            Self.toggleShowDesktop()
+        if canGoHome, let home = homeSpace { provider.switchTo(home) }
+        let me = ProcessInfo.processInfo.processIdentifier
+        let pids = NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && !$0.isHidden && $0.processIdentifier != me }
+            .map(\.processIdentifier)
+        // Some apps (Chrome) ignore NSRunningApplication.hide() but honour the Accessibility "hidden" attribute.
+        DispatchQueue.global(qos: .userInitiated).async {
+            for pid in pids {
+                let app = AXUIElementCreateApplication(pid)
+                AXUIElementSetMessagingTimeout(app, 0.3)
+                AXUIElementSetAttributeValue(app, kAXHiddenAttribute as CFString, kCFBooleanTrue)
+            }
         }
-    }
-
-    /// The Dock's own "Show Desktop" (the trackpad spread, or F11). Sent as a Dock notification, so no key or
-    /// pointer event is faked.
-    private static func toggleShowDesktop() {
-        typealias Send = @convention(c) (CFString, Int32) -> Void
-        guard let handle = dlopen("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices", RTLD_LAZY),
-              let symbol = dlsym(handle, "CoreDockSendNotification") else { return }
-        unsafeBitCast(symbol, to: Send.self)("com.apple.showdesktop.awake" as CFString, 0)
     }
 
     /// For the snapshot tool: an icon for an invented app.
