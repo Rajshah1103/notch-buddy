@@ -146,11 +146,9 @@ struct SwitcherView: View {
                         else { Color.clear.frame(width: 22, height: 22) }
                     }
                     SearchButton { notch.setSearching(true) }
-                    if model.canGoHome {
-                        DesktopButton {
-                            notch.collapse()
-                            model.goHome()
-                        }
+                    DesktopButton {
+                        model.goHome()
+                        notch.collapse()
                     }
                     Text(summary)
                         .font(.system(size: 11, weight: .medium).monospacedDigit())

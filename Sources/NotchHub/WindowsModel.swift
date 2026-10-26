@@ -309,16 +309,11 @@ final class WindowsModel: ObservableObject {
         provider.switchTo(space)
     }
 
-    /// The first Desktop on the display you are on: where "home" is, as a swipe back across Spaces would end up.
+    /// The first Desktop, where "home" is: what a swipe back across your Spaces ends on. Taken from the Space
+    /// list, which can lag a swipe, so it is never used to decide whether to go: pressing it on home is a no-op.
     var homeSpace: SpaceInfo? {
-        guard let current = snapshot.spaces.first(where: \.isCurrent) else { return nil }
-        return snapshot.spaces.filter { $0.displayID == current.displayID && $0.kind == .desktop }.min { $0.index < $1.index }
-    }
-
-    /// True when you are somewhere other than home (a full-screen app, or another Desktop).
-    var canGoHome: Bool {
-        guard let home = homeSpace else { return false }
-        return snapshot.spaces.first(where: \.isCurrent)?.id != home.id
+        let displayID = snapshot.spaces.first(where: \.isCurrent)?.displayID
+        return snapshot.spaces.filter { $0.kind == .desktop && (displayID == nil || $0.displayID == displayID) }.min { $0.index < $1.index }
     }
 
     /// Jumps straight to the first Desktop, with no swipe animation. Nothing is hidden, closed or moved.

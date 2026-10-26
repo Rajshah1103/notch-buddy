@@ -18,6 +18,24 @@ if CommandLine.arguments.contains("--dump") {
     exit(0)
 }
 
+// `NotchHub --go-home` does what the Desktop button does and reports where it started and ended up.
+if CommandLine.arguments.contains("--go-home") {
+    let provider = SystemWindowProvider()
+    let before = provider.snapshot().spaces
+    let current = before.first(where: \.isCurrent)
+    let home = before.filter { $0.displayID == current?.displayID && $0.kind == .desktop }.min { $0.index < $1.index }
+    print("spaces:", before.map { "\($0.index)\($0.kind == .desktop ? "d" : "f")\($0.isCurrent ? "*" : "")" }.joined(separator: " "), "home:", home?.index as Any)
+    // `--go-home away` first visits the last Space, to prove the jump works from a full-screen one.
+    if CommandLine.arguments.contains("away"), let away = before.last(where: { !$0.isCurrent }) {
+        provider.switchTo(away); Thread.sleep(forTimeInterval: 1.2)
+        print("away at:", provider.snapshot().spaces.first(where: \.isCurrent)?.index as Any)
+    }
+    if let home { provider.switchTo(home) }
+    Thread.sleep(forTimeInterval: 1)
+    print("now:", provider.snapshot().spaces.first(where: \.isCurrent)?.index as Any)
+    exit(0)
+}
+
 // `NotchHub --focus "App"` jumps to the app's main window and reports what ended up in front,
 // then returns to where it started. Exercises the same path as clicking an app in the notch.
 if let flag = CommandLine.arguments.firstIndex(of: "--focus"), flag + 1 < CommandLine.arguments.count {
