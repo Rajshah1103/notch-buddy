@@ -46,7 +46,12 @@ final class LiveActivityModel: ObservableObject {
     /// False while a bubble or anything else is on show beside the ears.
     var isCalm: () -> Bool = { true }
 
-    private var director = IdleDirector()
+    private var director: IdleDirector = {
+        var d = IdleDirector()
+        // Debug: NOTCHHUB_IDLE_FAST=1 brings the cameos to seconds instead of minutes.
+        if ProcessInfo.processInfo.environment["NOTCHHUB_IDLE_FAST"] != nil { d.firstDelay = 8...8; d.gap = 10...10 }
+        return d
+    }()
     private var idleTimer: Timer?
     private var idleEnd: DispatchWorkItem?
     private var lastExtra: CGFloat = 0
@@ -151,7 +156,9 @@ final class LiveActivityModel: ObservableObject {
         let calm = current == .none && isCalm()
         if !calm { endIdle() }
         let seconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
-        guard case .play(let antic, let variant) = director.update(now: Date().timeIntervalSinceReferenceDate, isIdle: calm, userIdle: seconds) else { return }
+        let decision = director.update(now: Date().timeIntervalSinceReferenceDate, isIdle: calm, userIdle: seconds)
+        PerfProbe.log("idle tick: calm \(calm) (\(current), bubble \(!isCalm())), away \(Int(seconds)) s, \(decision)")
+        guard case .play(let antic, let variant) = decision else { return }
         // A beat after the ears open, so the buddy does not start while the window is still growing.
         let start = Date().addingTimeInterval(0.35)
         idle = IdleScene(antic: antic, variant: variant, start: start)
