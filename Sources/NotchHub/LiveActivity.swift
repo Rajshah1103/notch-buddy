@@ -41,7 +41,7 @@ final class LiveActivityModel: ObservableObject {
     /// How wide the ears should be right now.
     var earExtra: CGFloat { current != .none ? LiveLayout.extra : (idle != nil ? LiveLayout.idleExtra : 0) }
     /// Whether the buddy comes out to idle, and whether it speaks. Set from Settings.
-    var idleEnabled = true { didSet { if idleEnabled != oldValue { idleSettingChanged() } } }
+    var idleEnabled = false { didSet { if idleEnabled != oldValue { idleSettingChanged() } } }
     var idleText = true
     /// False while a bubble or anything else is on show beside the ears.
     var isCalm: () -> Bool = { true }
