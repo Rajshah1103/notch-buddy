@@ -309,33 +309,21 @@ final class WindowsModel: ObservableObject {
         provider.switchTo(space)
     }
 
-    /// Apps hidden by "Desktop", so the same button can bring them back.
-    @Published private(set) var desktopHidden: [pid_t] = []
+    /// The first Desktop on the display you are on: where "home" is, as a swipe back across Spaces would end up.
+    var homeSpace: SpaceInfo? {
+        guard let current = snapshot.spaces.first(where: \.isCurrent) else { return nil }
+        return snapshot.spaces.filter { $0.displayID == current.displayID && $0.kind == .desktop }.min { $0.index < $1.index }
+    }
 
-    /// Takes you home. From a full-screen app or another Desktop it switches to the first Desktop; once you are
-    /// on it, it hides every other app (nothing is closed or moved) to show the bare desktop. Pressed again, it
-    /// brings back exactly what it hid.
-    func toggleDesktop() {
-        if !desktopHidden.isEmpty {
-            let hidden = desktopHidden
-            desktopHidden = []
-            for pid in hidden { NSRunningApplication(processIdentifier: pid)?.unhide() }
-            return
-        }
-        if let current = snapshot.spaces.first(where: \.isCurrent) {
-            let home = snapshot.spaces.filter { $0.displayID == current.displayID && $0.kind == .desktop }.min { $0.index < $1.index }
-            if let home, home.id != current.id {
-                provider.switchTo(home)
-                return
-            }
-        }
-        let me = ProcessInfo.processInfo.processIdentifier
-        let apps = NSWorkspace.shared.runningApplications.filter {
-            $0.activationPolicy == .regular && !$0.isHidden && $0.processIdentifier != me && $0.bundleIdentifier != "com.apple.finder"
-        }
-        desktopHidden = apps.map(\.processIdentifier)
-        for app in apps { app.hide() }
-        NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first?.activate()
+    /// True when you are somewhere other than home (a full-screen app, or another Desktop).
+    var canGoHome: Bool {
+        guard let home = homeSpace else { return false }
+        return snapshot.spaces.first(where: \.isCurrent)?.id != home.id
+    }
+
+    /// Jumps straight to the first Desktop, with no swipe animation. Nothing is hidden or moved.
+    func goHome() {
+        if let home = homeSpace { provider.switchTo(home) }
     }
 
     /// For the snapshot tool: an icon for an invented app.

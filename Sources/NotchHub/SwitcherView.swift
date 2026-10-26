@@ -146,9 +146,11 @@ struct SwitcherView: View {
                         else { Color.clear.frame(width: 22, height: 22) }
                     }
                     SearchButton { notch.setSearching(true) }
-                    DesktopButton(back: !model.desktopHidden.isEmpty) {
-                        model.toggleDesktop()
-                        notch.collapse()
+                    if model.canGoHome {
+                        DesktopButton {
+                            model.goHome()
+                            notch.collapse()
+                        }
                     }
                     Text(summary)
                         .font(.system(size: 11, weight: .medium).monospacedDigit())
@@ -622,17 +624,16 @@ private struct PreviewPane: View {
 
 // MARK: - Search
 
-/// Takes you home: hides every other app to reveal the desktop, and brings them back on the next press.
+/// Takes you home: straight to the first Desktop, from a full-screen app or any other Desktop.
 private struct DesktopButton: View {
-    let back: Bool
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: back ? "arrow.uturn.backward" : "desktopcomputer").font(.system(size: 10, weight: .semibold))
-                Text(back ? "Back" : "Desktop").font(.system(size: 11, weight: .medium))
+                Image(systemName: "desktopcomputer").font(.system(size: 10, weight: .semibold))
+                Text("Desktop").font(.system(size: 11, weight: .medium))
             }
             .foregroundStyle(Theme.textSecondary)
             .padding(.horizontal, 9)
@@ -642,7 +643,7 @@ private struct DesktopButton: View {
         }
         .buttonStyle(PressStyle())
         .pointerHover { hovering = $0 }
-        .accessibilityLabel(back ? "Bring your apps back" : "Show the desktop")
+        .accessibilityLabel("Go to the Desktop")
     }
 }
 
