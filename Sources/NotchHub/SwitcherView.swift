@@ -146,11 +146,9 @@ struct SwitcherView: View {
                         else { Color.clear.frame(width: 22, height: 22) }
                     }
                     SearchButton { notch.setSearching(true) }
-                    if model.canGoHome {
-                        DesktopButton {
-                            model.goHome()
-                            notch.collapse()
-                        }
+                    DesktopButton {
+                        notch.collapse()
+                        model.goHome()
                     }
                     Text(summary)
                         .font(.system(size: 11, weight: .medium).monospacedDigit())
@@ -624,7 +622,7 @@ private struct PreviewPane: View {
 
 // MARK: - Search
 
-/// Takes you home: straight to the first Desktop, from a full-screen app or any other Desktop.
+/// Takes you to the desktop: the first Desktop from anywhere else, or the bare wallpaper when you are already there.
 private struct DesktopButton: View {
     let action: () -> Void
     @State private var hovering = false
