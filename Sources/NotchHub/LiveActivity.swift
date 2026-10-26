@@ -125,8 +125,17 @@ final class LiveActivityModel: ObservableObject {
         let new: Activity = claudeActivity != .none ? claudeActivity : waitingActivity != .none ? waitingActivity : (meetingActivity != .none ? meetingActivity : buildActivity)
         guard new != current else { return }
         current = new
-        if new != .none { endIdle() }
+        if !canIdle { endIdle() }
         publishEars()
+    }
+
+    /// The buddy may step out while nothing is live, or while Claude or a build is simply running. Anything
+    /// that wants you (an approval, a finished chat, a meeting) keeps the notch to itself.
+    var canIdle: Bool {
+        switch current {
+        case .none, .claude, .build: return true
+        case .waiting, .meeting: return false
+        }
     }
 
     private func publishEars() {
@@ -153,7 +162,7 @@ final class LiveActivityModel: ObservableObject {
     }
 
     private func idleTick() {
-        let calm = current == .none && isCalm()
+        let calm = canIdle && isCalm()
         if !calm { endIdle() }
         let seconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
         let decision = director.update(now: Date().timeIntervalSinceReferenceDate, isIdle: calm, userIdle: seconds)
@@ -196,9 +205,9 @@ struct LiveView: View {
         VStack(spacing: 0) {
             ZStack {
                 HStack(spacing: 0) {
-                    face.frame(width: extra)
+                    face.frame(width: extra).opacity(showsIdle ? 0 : 1)
                     Color.clear.frame(width: g.collapsedSize.width)
-                    status
+                    status.opacity(showsIdle ? 0 : 1)
                         .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
                         .foregroundStyle(Color.white.opacity(0.9))
                         .lineLimit(1).minimumScaleFactor(0.8)
@@ -221,7 +230,7 @@ struct LiveView: View {
     }
 
     /// The idle cameo yields to everything else: a bubble on show, or a real activity.
-    private var showsIdle: Bool { center.showing == nil && model.current == .none }
+    private var showsIdle: Bool { center.showing == nil && model.canIdle && model.idle != nil }
 
     // MARK: Buddy
 
