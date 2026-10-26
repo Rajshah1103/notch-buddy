@@ -316,9 +316,21 @@ final class WindowsModel: ObservableObject {
         return snapshot.spaces.filter { $0.kind == .desktop && (displayID == nil || $0.displayID == displayID) }.min { $0.index < $1.index }
     }
 
-    /// Jumps straight to the first Desktop, with no swipe animation. Nothing is hidden, closed or moved.
+    /// Takes you to the desktop: jumps to the first Desktop (a no-op if you are on it), then sends the Dock's own
+    /// "Show Desktop", the trackpad's spread, which slides every window to the edge to uncover the wallpaper.
+    /// Pressed again it slides them back. Nothing is hidden, closed or moved for good.
     func goHome() {
         if let home = homeSpace { provider.switchTo(home) }
+        // Let the Space change settle first, or the windows slide away on the Space you are leaving.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { Self.toggleShowDesktop() }
+    }
+
+    /// The Dock's Show Desktop (the same call the spread gesture and F11 make). A Dock notification, not a faked key.
+    private static func toggleShowDesktop() {
+        typealias Send = @convention(c) (CFString, Int32) -> Void
+        guard let handle = dlopen("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices", RTLD_LAZY),
+              let symbol = dlsym(handle, "CoreDockSendNotification") else { return }
+        unsafeBitCast(symbol, to: Send.self)("com.apple.showdesktop.awake" as CFString, 0)
     }
 
     /// For the snapshot tool: an icon for an invented app.
