@@ -317,21 +317,14 @@ final class WindowsModel: ObservableObject {
     }
 
     /// Takes you home, as a swipe back across your Spaces would: onto the first Desktop, with its Dock and wallpaper.
-    /// Only switching the Space id leaves a full-screen app drawn behind, so this goes through the same path as
-    /// clicking a window in the notch: switch, then raise a window that lives there and bring its app forward.
+    /// The provider makes a real Space transition; setting the Space id alone leaves a full-screen app drawn behind.
     func goHome() {
         guard let home = homeSpace else { return }
-        // The Space list can lag a swipe, so never trust its idea of "current": always ask for the switch.
-        let target = SpaceInfo(id: home.id, index: home.index, displayID: home.displayID, isCurrent: false,
-                               kind: home.kind, windows: home.windows)
-        let window = home.windows.filter { $0.bounds.width > 300 && $0.bounds.height > 300 }.min { $0.order < $1.order }
-        let provider = provider
-        guard let window else {
-            provider.switchTo(home)
-            provider.bringFinderForward()
-            return
+        let provider = provider, spaces = snapshot.spaces
+        Task {
+            let account = await provider.goHome(to: home, among: spaces)
+            PerfProbe.log("go home: \(account); front \(NSWorkspace.shared.frontmostApplication?.localizedName ?? "?")")
         }
-        Task { await provider.focus(window, in: target) }
     }
 
     /// For the snapshot tool: an icon for an invented app.

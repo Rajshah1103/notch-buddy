@@ -130,9 +130,75 @@ public final class SystemWindowProvider {
         return AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString) == .success
     }
 
-    /// Brings Finder forward, which owns the desktop itself. For a Desktop with no window to raise.
-    public func bringFinderForward() {
-        if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first { bringToFront(finder) }
+    /// The Space the window server says is showing on `displayID`, read fresh (never from an old snapshot).
+    private func activeSpaceID(displayID: String) -> Int? {
+        guard let displays = CGSCopyManagedDisplaySpaces(CGSMainConnectionID()) as? [[String: Any]] else { return nil }
+        let display = displays.first { ($0["Display Identifier"] as? String) == displayID } ?? displays.first
+        return (display?["Current Space"] as? [String: Any])?["ManagedSpaceID"] as? Int
+    }
+
+    /// Goes to `home` with a real Space transition, the way a trackpad swipe does. Setting the Space id directly
+    /// flips the window server's idea of the Space but leaves a full-screen app drawn behind, so this never does.
+    /// First it brings forward an app whose windows are all on `home` (macOS makes the move itself); if that does
+    /// not get there, it presses the system "Move left a space" shortcut once per Space in between.
+    /// Returns a short account of what happened, for the log.
+    public func goHome(to home: SpaceInfo, among spaces: [SpaceInfo]) async -> String {
+        guard activeSpaceID(displayID: home.displayID) != home.id else { return "already home" }
+        var notes: [String] = []
+
+        // 1. Let macOS do it: activate an app that lives only on the home Space.
+        var elsewhere = Set<Int32>()
+        for other in spaces where other.id != home.id { for window in other.windows { elsewhere.insert(window.pid) } }
+        let owners = home.windows.filter {
+            !elsewhere.contains($0.pid) && NSRunningApplication(processIdentifier: $0.pid)?.activationPolicy == .regular
+        }.sorted { $0.order < $1.order }
+        if let owner = owners.first, let app = NSRunningApplication(processIdentifier: owner.pid) {
+            if app.isHidden { app.unhide() }
+            bringToFront(app)
+            notes.append("activated \(owner.appName)")
+            for _ in 0..<16 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                if activeSpaceID(displayID: home.displayID) == home.id { return notes.joined(separator: ", ") + ": arrived" }
+            }
+        } else {
+            notes.append("no app lives only on home (\(home.windows.count) windows, \(elsewhere.count) apps elsewhere)")
+        }
+
+        // 2. Press "Move left a space" (Control+Left), as the swipe does, once per Space between here and home.
+        guard let displays = CGSCopyManagedDisplaySpaces(CGSMainConnectionID()) as? [[String: Any]] else { return notes.joined(separator: ", ") }
+        var order: [Int] = []
+        for display in displays { for space in display["Spaces"] as? [[String: Any]] ?? [] { if let id = space["ManagedSpaceID"] as? Int { order.append(id) } } }
+        guard let here = activeSpaceID(displayID: home.displayID), let from = order.firstIndex(of: here), let to = order.firstIndex(of: home.id)
+        else { return notes.joined(separator: ", ") + ", could not place Spaces" }
+        guard Self.moveLeftShortcutEnabled else { return notes.joined(separator: ", ") + ", the Move left a space shortcut is off in Keyboard settings" }
+        let key: CGKeyCode = from > to ? 123 : 124                      // left or right arrow
+        for _ in 0..<abs(from - to) {
+            Self.pressSpaceShortcut(key)
+            for _ in 0..<12 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                if activeSpaceID(displayID: home.displayID) != here { break }
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if activeSpaceID(displayID: home.displayID) == home.id { break }
+        }
+        let arrived = activeSpaceID(displayID: home.displayID) == home.id
+        return notes.joined(separator: ", ") + ", pressed \(abs(from - to)) shortcut(s): " + (arrived ? "arrived" : "did not arrive")
+    }
+
+    /// "Move left/right a space" in System Settings > Keyboard > Mission Control (on unless the user turned it off).
+    private static var moveLeftShortcutEnabled: Bool {
+        let keys = UserDefaults(suiteName: "com.apple.symbolichotkeys")?.dictionary(forKey: "AppleSymbolicHotKeys")
+        let entry = keys?["79"] as? [String: Any]
+        return (entry?["enabled"] as? Bool) ?? true
+    }
+
+    private static func pressSpaceShortcut(_ key: CGKeyCode) {
+        let flags: CGEventFlags = [.maskControl, .maskSecondaryFn]
+        for down in [true, false] {
+            let event = CGEvent(keyboardEventSource: CGEventSource(stateID: .hidSystemState), virtualKey: key, keyDown: down)
+            event?.flags = flags
+            event?.post(tap: .cghidEventTap)
+        }
     }
 
     /// Opens (or reopens) an app that has no window, like clicking its Dock icon.

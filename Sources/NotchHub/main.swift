@@ -18,29 +18,18 @@ if CommandLine.arguments.contains("--dump") {
     exit(0)
 }
 
-// `NotchHub --go-home` does what the Desktop button does and reports where it started and ended up.
+// `NotchHub --go-home` does what the Desktop button does and reports what happened. It moves your screen.
 if CommandLine.arguments.contains("--go-home") {
     let provider = SystemWindowProvider()
-    let before = provider.snapshot().spaces
-    let current = before.first(where: \.isCurrent)
-    let home = before.filter { $0.displayID == current?.displayID && $0.kind == .desktop }.min { $0.index < $1.index }
-    print("spaces:", before.map { "\($0.index)\($0.kind == .desktop ? "d" : "f")\($0.isCurrent ? "*" : "")" }.joined(separator: " "), "home:", home?.index as Any)
-    // `--go-home away` first visits the last Space, to prove the jump works from a full-screen one.
-    if CommandLine.arguments.contains("away"), let away = before.last(where: { !$0.isCurrent }) {
-        provider.switchTo(away); Thread.sleep(forTimeInterval: 1.2)
-        print("away at:", provider.snapshot().spaces.first(where: \.isCurrent)?.index as Any)
-    }
+    let spaces = provider.snapshot().spaces
+    let current = spaces.first(where: \.isCurrent)
+    let home = spaces.filter { $0.displayID == current?.displayID && $0.kind == .desktop }.min { $0.index < $1.index }
+    print("spaces:", spaces.map { "\($0.index)\($0.kind == .desktop ? "d" : "f")\($0.isCurrent ? "*" : "")" }.joined(separator: " "))
     if let home {
-        let target = SpaceInfo(id: home.id, index: home.index, displayID: home.displayID, isCurrent: false, kind: home.kind, windows: home.windows)
-        if let window = home.windows.filter({ $0.bounds.width > 300 && $0.bounds.height > 300 }).min(by: { $0.order < $1.order }) {
-            let done = DispatchSemaphore(value: 0)
-            Task { await provider.focus(window, in: target); done.signal() }
-            done.wait()
-        } else { provider.switchTo(home); provider.bringFinderForward() }
+        let done = DispatchSemaphore(value: 0)
+        Task { print(await provider.goHome(to: home, among: spaces)); done.signal() }
+        done.wait()
     }
-    Thread.sleep(forTimeInterval: 1)
-    print("now:", provider.snapshot().spaces.first(where: \.isCurrent)?.index as Any,
-          "front:", NSWorkspace.shared.frontmostApplication?.localizedName as Any)
     exit(0)
 }
 
