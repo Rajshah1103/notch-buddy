@@ -69,6 +69,10 @@ final class AppSettings: ObservableObject {
     @Published var githubUsesCommandLine: Bool { didSet { defaults.set(githubUsesCommandLine, forKey: "githubUsesCommandLine"); changed() } }
     /// Pop-out bubbles under the notch that announce events (new mail, builds, reviews, meetings).
     @Published var showBubbles: Bool { didSet { defaults.set(showBubbles, forKey: "showBubbles"); changed() } }
+    /// The buddy comes out now and then to dance, wave and nap when nothing else is going on.
+    @Published var idleBuddy: Bool { didSet { defaults.set(idleBuddy, forKey: "idleBuddy"); changed() } }
+    /// Whether it says a word or two while it does.
+    @Published var idleBuddyText: Bool { didSet { defaults.set(idleBuddyText, forKey: "idleBuddyText"); changed() } }
     @Published var showGmail: Bool { didSet { defaults.set(showGmail, forKey: "showGmail"); changed() } }
     @Published var showCalendar: Bool { didSet { defaults.set(showCalendar, forKey: "showCalendar"); changed() } }
     @Published var showJenkins: Bool { didSet { defaults.set(showJenkins, forKey: "showJenkins"); changed() } }
@@ -99,6 +103,8 @@ final class AppSettings: ObservableObject {
         showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
         githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true
         showBubbles = defaults.object(forKey: "showBubbles") as? Bool ?? true
+        idleBuddy = defaults.object(forKey: "idleBuddy") as? Bool ?? true
+        idleBuddyText = defaults.object(forKey: "idleBuddyText") as? Bool ?? true
         showGmail = defaults.bool(forKey: "showGmail")       // off until chosen: it needs the user's own Google client
         showCalendar = defaults.bool(forKey: "showCalendar")      // off until chosen, so no permission prompt appears unasked
         showJenkins = defaults.bool(forKey: "showJenkins")

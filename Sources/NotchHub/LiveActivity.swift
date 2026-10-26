@@ -2,6 +2,7 @@ import BuddyKit
 import CalendarKit
 import ClaudeUsage
 import Combine
+import CoreGraphics
 import JenkinsKit
 import NotchCore
 import SwiftUI
@@ -9,6 +10,15 @@ import SwiftUI
 enum LiveLayout {
     /// How far the collapsed notch widens on each side while something is live.
     static let extra: CGFloat = 56
+    /// A little wider while the buddy is out idling, so its caption has room.
+    static let idleExtra: CGFloat = 72
+}
+
+/// One cameo of the idle buddy: which antic, which wording, and when it began (a beat after the ears open).
+struct IdleScene: Equatable {
+    let antic: Antic
+    let variant: Int
+    let start: Date
 }
 
 /// What the collapsed notch shows, if anything. One thing at a time, by priority: Claude working,
@@ -24,7 +34,22 @@ final class LiveActivityModel: ObservableObject {
     }
 
     @Published private(set) var current = Activity.none
-    var onActiveChange: ((Bool) -> Void)?
+    /// The buddy's idle cameo, shown only while nothing else is live.
+    @Published private(set) var idle: IdleScene?
+    /// Called with the width the ears should add on each side (0 for none).
+    var onEarsChange: ((CGFloat) -> Void)?
+    /// How wide the ears should be right now.
+    var earExtra: CGFloat { current != .none ? LiveLayout.extra : (idle != nil ? LiveLayout.idleExtra : 0) }
+    /// Whether the buddy comes out to idle, and whether it speaks. Set from Settings.
+    var idleEnabled = true { didSet { if idleEnabled != oldValue { idleSettingChanged() } } }
+    var idleText = true
+    /// False while a bubble or anything else is on show beside the ears.
+    var isCalm: () -> Bool = { true }
+
+    private var director = IdleDirector()
+    private var idleTimer: Timer?
+    private var idleEnd: DispatchWorkItem?
+    private var lastExtra: CGFloat = 0
 
     private var subscriptions = Set<AnyCancellable>()
     private var claudeActivity = Activity.none
@@ -93,10 +118,55 @@ final class LiveActivityModel: ObservableObject {
                            .min { $0.start < $1.start }
         meetingActivity = soon.map { .meeting(title: $0.title, start: $0.start) } ?? .none
         let new: Activity = claudeActivity != .none ? claudeActivity : waitingActivity != .none ? waitingActivity : (meetingActivity != .none ? meetingActivity : buildActivity)
-        let wasActive = current != .none
         guard new != current else { return }
         current = new
-        if wasActive != (new != .none) { onActiveChange?(new != .none) }
+        if new != .none { endIdle() }
+        publishEars()
+    }
+
+    private func publishEars() {
+        let extra = earExtra
+        guard extra != lastExtra else { return }
+        lastExtra = extra
+        onEarsChange?(extra)
+    }
+
+    // MARK: Idle cameos
+
+    private func idleSettingChanged() {
+        idleTimer?.invalidate()
+        idleTimer = nil
+        if idleEnabled {
+            // A slow check, and only while the buddy is allowed out; each tick is a clock read and a counter query.
+            idleTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.idleTick() }
+            }
+        } else {
+            endIdle()
+            director = IdleDirector()
+        }
+    }
+
+    private func idleTick() {
+        let calm = current == .none && isCalm()
+        if !calm { endIdle() }
+        let seconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+        guard case .play(let antic, let variant) = director.update(now: Date().timeIntervalSinceReferenceDate, isIdle: calm, userIdle: seconds) else { return }
+        // A beat after the ears open, so the buddy does not start while the window is still growing.
+        let start = Date().addingTimeInterval(0.35)
+        idle = IdleScene(antic: antic, variant: variant, start: start)
+        publishEars()
+        let end = DispatchWorkItem { [weak self] in self?.endIdle() }
+        idleEnd = end
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35 + antic.duration + 0.2, execute: end)
+    }
+
+    private func endIdle() {
+        idleEnd?.cancel()
+        idleEnd = nil
+        guard idle != nil else { return }
+        idle = nil
+        publishEars()
     }
 }
 
@@ -114,16 +184,22 @@ struct LiveView: View {
 
     var body: some View {
         let g = notch.geometry
-        let earsWidth = g.collapsedSize.width + 2 * LiveLayout.extra
+        let extra = model.earExtra
+        let earsWidth = g.collapsedSize.width + 2 * extra
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                face.frame(width: LiveLayout.extra)
-                Color.clear.frame(width: g.collapsedSize.width)
-                status
-                    .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.9))
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                    .frame(width: LiveLayout.extra)
+            ZStack {
+                HStack(spacing: 0) {
+                    face.frame(width: extra)
+                    Color.clear.frame(width: g.collapsedSize.width)
+                    status
+                        .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Color.white.opacity(0.9))
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                        .frame(width: extra)
+                }
+                if showsIdle, let scene = model.idle {
+                    IdleBuddy(scene: scene, extra: extra, notchWidth: g.collapsedSize.width, showText: model.idleText)
+                }
             }
             .frame(width: earsWidth, height: g.collapsedSize.height)
 
@@ -136,6 +212,9 @@ struct LiveView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
     }
+
+    /// The idle cameo yields to everything else: a bubble on show, or a real activity.
+    private var showsIdle: Bool { center.showing == nil && model.current == .none }
 
     // MARK: Buddy
 
@@ -151,7 +230,7 @@ struct LiveView: View {
         case .waiting(_, let approval): return approval ? (.needsYou, Theme.claude) : (.happy, .green)
         case .meeting: return (.clockWatching, Theme.accent)
         case .build: return (.working, .orange)
-        case .none: return nil
+        case .none: return nil          // the idle cameo is drawn by IdleBuddy, not as a mood
         }
     }
 
@@ -303,5 +382,67 @@ struct ProgressRing: View {
                 .rotationEffect(.degrees(-90))
                 .animation(.easeOut(duration: 0.4), value: progress)
         }
+    }
+}
+
+/// The buddy out idling: it walks, hops and spins across the ears, and can slip behind the notch. A cameo only
+/// exists while it plays, so between cameos nothing here is on screen or ticking.
+struct IdleBuddy: View {
+    let scene: IdleScene
+    let extra: CGFloat
+    let notchWidth: CGFloat
+    let showText: Bool
+    /// Seconds into the antic, for offscreen renders (a timeline does not run there).
+    var fixedTime: Double?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let size: CGFloat = 24
+
+    var body: some View {
+        if let fixedTime {
+            layer(scene.antic.frame(at: fixedTime, travel: (notchWidth + extra) / size), still: false)
+        } else if reduceMotion {
+            // No travel or spin: one still pose and the words, for as long as the cameo lasts.
+            layer(scene.antic.frame(at: 1.2, travel: 0), still: true)
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                layer(scene.antic.frame(at: context.date.timeIntervalSince(scene.start), travel: (notchWidth + extra) / size), still: false)
+            }
+        }
+    }
+
+    private func layer(_ f: Antic.Frame, still: Bool) -> some View {
+        let width = notchWidth + 2 * extra
+        let dx = still ? 0 : f.dx
+        return ZStack(alignment: .leading) {
+            // The notch itself is hardware: whatever would draw over it is hidden, so the buddy can slip behind it.
+            ZStack(alignment: .leading) {
+                Canvas { context, canvasSize in
+                    BuddyArt.draw(in: &context, size: canvasSize, mood: f.mood, tint: Theme.claude, pose: f.pose)
+                }
+                .frame(width: size, height: size)
+                .rotationEffect(.degrees(still ? 0 : f.roll))
+                .offset(x: (extra - size) / 2 + dx * size)
+            }
+            .frame(width: width, alignment: .leading)
+            .mask {
+                HStack(spacing: 0) {
+                    Rectangle().frame(width: extra)
+                    Color.clear.frame(width: notchWidth)
+                    Rectangle().frame(width: extra)
+                }
+            }
+            if showText {
+                Text(scene.antic.caption(variant: scene.variant))
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .frame(width: extra)
+                    .offset(x: extra + notchWidth)
+                    .opacity(still ? 1 : f.captionOpacity)
+            }
+        }
+        .frame(width: width, alignment: .leading)
+        .accessibilityHidden(true)
     }
 }

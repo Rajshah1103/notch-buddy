@@ -58,10 +58,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PerfProbe.startStallWatchdog()
 
         // While Claude Code works, the collapsed notch widens into a live activity.
-        live.onActiveChange = { [weak self] active in
-            PerfProbe.log("live activity = \(active)")
-            self?.notch?.setLive(extra: active ? LiveLayout.extra : nil)
+        live.onEarsChange = { [weak self] extra in
+            PerfProbe.log("ears extra = \(Int(extra))")
+            self?.notch?.setLive(extra: extra > 0 ? extra : nil)
         }
+        live.isCalm = { [moments] in moments.showing == nil }
         AppActions.openSettings = { [weak self] in self?.showSettings() }
         model.startTrackingRecents()
         model.startTrackingSpaces()
@@ -110,6 +111,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applySettings() {
         notch?.hoverDelay = settings.hoverDelayMs / 1000
+        live.idleText = settings.idleBuddyText
+        live.idleEnabled = settings.idleBuddy
 
         hub.apply()      // start or stop each integration to match Settings
         windows.hiddenAppsChanged()

@@ -262,6 +262,12 @@ struct SettingsView: View {
         Form {
             Section("Notch Buddy") {
                 Toggle("Show pop-out bubbles for events", isOn: $settings.showBubbles)
+                Toggle("Let the buddy hang out when idle", isOn: $settings.idleBuddy)
+                if settings.idleBuddy {
+                    Toggle("Let it say a word or two", isOn: $settings.idleBuddyText)
+                }
+                Text("Every minute or two the buddy steps out beside the notch to dance, wave or sneak past, and naps if you step away. It stays out of the way of everything else.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text("Your buddy reacts in the notch and a small bubble drops down for new mail, finished or broken builds, review requests, Claude needing you, and meetings. Turn it off to keep only the quiet ears.")
                     .font(.caption).foregroundStyle(.secondary)
             }
