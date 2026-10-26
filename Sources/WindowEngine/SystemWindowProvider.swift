@@ -130,6 +130,11 @@ public final class SystemWindowProvider {
         return AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString) == .success
     }
 
+    /// Brings Finder forward, which owns the desktop itself. For a Desktop with no window to raise.
+    public func bringFinderForward() {
+        if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first { bringToFront(finder) }
+    }
+
     /// Opens (or reopens) an app that has no window, like clicking its Dock icon.
     public func open(_ app: AppRecord) {
         guard let running = NSRunningApplication(processIdentifier: app.pid) else { return }

@@ -30,9 +30,17 @@ if CommandLine.arguments.contains("--go-home") {
         provider.switchTo(away); Thread.sleep(forTimeInterval: 1.2)
         print("away at:", provider.snapshot().spaces.first(where: \.isCurrent)?.index as Any)
     }
-    if let home { provider.switchTo(home) }
+    if let home {
+        let target = SpaceInfo(id: home.id, index: home.index, displayID: home.displayID, isCurrent: false, kind: home.kind, windows: home.windows)
+        if let window = home.windows.filter({ $0.bounds.width > 300 && $0.bounds.height > 300 }).min(by: { $0.order < $1.order }) {
+            let done = DispatchSemaphore(value: 0)
+            Task { await provider.focus(window, in: target); done.signal() }
+            done.wait()
+        } else { provider.switchTo(home); provider.bringFinderForward() }
+    }
     Thread.sleep(forTimeInterval: 1)
-    print("now:", provider.snapshot().spaces.first(where: \.isCurrent)?.index as Any)
+    print("now:", provider.snapshot().spaces.first(where: \.isCurrent)?.index as Any,
+          "front:", NSWorkspace.shared.frontmostApplication?.localizedName as Any)
     exit(0)
 }
 
