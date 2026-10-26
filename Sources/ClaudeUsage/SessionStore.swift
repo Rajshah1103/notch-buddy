@@ -15,6 +15,9 @@ public final class SessionStore {
     }
 
     private var files: [String: File] = [:]
+    /// Sessions that Claude Code itself reports as idle (or whose process is gone). A transcript can still be
+    /// touched while a chat sits open, so a recent write alone must not read as "working" for these.
+    private var idleSessions: Set<String> = []
     private let workingWindow: TimeInterval
     private let now: () -> Date
     private let calendar: Calendar
@@ -30,6 +33,8 @@ public final class SessionStore {
         self.now = now
         self.calendar = calendar
     }
+
+    public func setQuiet(_ ids: Set<String>) { idleSessions = ids }
 
     /// `fileID` is the transcript's file name (the session id); `modified` is when it was last written.
     public func ingest(fileID: String, folder: String? = nil, title: String? = nil, lines: [TranscriptLine], modified: Date) {
@@ -89,7 +94,7 @@ public final class SessionStore {
                 outputTokens: todays.reduce(0) { $0 + $1.output },
                 title: file.title, cwd: file.cwd, attention: attention)
             sessions.append(session)
-            if attention == nil, current.timeIntervalSince(file.lastWrite) < activeWindow(after: file.turn) {
+            if attention == nil, !idleSessions.contains(id), current.timeIntervalSince(file.lastWrite) < activeWindow(after: file.turn) {
                 working.append(session)
                 burstStarts.append(file.burstStart)
             }

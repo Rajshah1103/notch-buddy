@@ -242,3 +242,15 @@ struct TokenFormatTests {
         #expect(TokenFormat.short(3_200_000) == "3.2M")
     }
 }
+
+struct QuietSessionTests {
+    @Test func aSessionClaudeReportsIdleIsNotWorkingEvenIfItsTranscriptWasJustTouched() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = SessionStore(workingWindow: 30, now: { now })
+        store.ingest(fileID: "a", folder: "/p/a", lines: [], modified: now.addingTimeInterval(-5))
+        #expect(store.snapshot().working.count == 1)
+        store.setQuiet(["a"])
+        #expect(store.snapshot().working.isEmpty)
+        #expect(store.snapshot().sessions.count == 1)          // still listed, just not working
+    }
+}

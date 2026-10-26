@@ -8,6 +8,8 @@ public final class ClaudeUsageMonitor: @unchecked Sendable {
     public var onChange: ((ClaudeSnapshot) -> Void)?
 
     private let root: URL
+    /// Claude Code keeps one small file per running session here, with its own status (busy or idle).
+    private let sessionsRoot: URL
     private let store: SessionStore
     private let queue = DispatchQueue(label: "notchhub.claude-usage", qos: .utility)
     private var offsets: [String: UInt64] = [:]
@@ -16,13 +18,16 @@ public final class ClaudeUsageMonitor: @unchecked Sendable {
     private var last = ClaudeSnapshot.idle
 
     public init(root: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/projects"),
+                sessionsRoot: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/sessions"),
                 workingWindow: TimeInterval = 30) {
         self.root = root
+        self.sessionsRoot = sessionsRoot
         self.store = SessionStore(workingWindow: workingWindow)
     }
 
     public func start() {
         queue.async { [self] in
+            refreshQuiet()
             scanExisting()
             startWatching()
             publish()
@@ -126,7 +131,7 @@ public final class ClaudeUsageMonitor: @unchecked Sendable {
         var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
                                            retain: nil, release: nil, copyDescription: nil)
         let flags = UInt32(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagNoDefer)
-        guard let stream = FSEventStreamCreate(kCFAllocatorDefault, callback, &context, [root.path] as CFArray,
+        guard let stream = FSEventStreamCreate(kCFAllocatorDefault, callback, &context, [root.path, sessionsRoot.path] as CFArray,
                                                FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.4, flags)
         else { return }
         FSEventStreamSetDispatchQueue(stream, queue)
@@ -134,7 +139,23 @@ public final class ClaudeUsageMonitor: @unchecked Sendable {
         self.stream = stream
     }
 
+    /// Reads each running session's own status. Only "idle" and a vanished process count as quiet; anything
+    /// else (busy, or a status this code does not know) falls back to watching the transcript.
+    private func refreshQuiet() {
+        let files = (try? FileManager.default.contentsOfDirectory(at: sessionsRoot, includingPropertiesForKeys: nil)) ?? []
+        var quiet: Set<String> = []
+        for file in files where file.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: file),
+                  let info = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let id = info["sessionId"] as? String else { continue }
+            let alive = (info["pid"] as? Int).map { kill(pid_t($0), 0) == 0 || errno == EPERM } ?? true
+            if !alive || info["status"] as? String == "idle" { quiet.insert(id) }
+        }
+        store.setQuiet(quiet)
+    }
+
     private func changed(_ paths: [String]) {
+        if paths.contains(where: { $0.hasPrefix(sessionsRoot.path) }) { refreshQuiet() }
         for path in Set(paths) where path.hasSuffix(".jsonl") {
             let url = URL(fileURLWithPath: path)
             let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
