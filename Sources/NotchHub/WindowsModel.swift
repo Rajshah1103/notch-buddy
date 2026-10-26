@@ -312,14 +312,22 @@ final class WindowsModel: ObservableObject {
     /// Apps hidden by "Desktop", so the same button can bring them back.
     @Published private(set) var desktopHidden: [pid_t] = []
 
-    /// Shows the desktop: hides every other app (nothing is closed or moved) and puts Finder forward.
-    /// Pressed again, it brings back exactly what it hid.
+    /// Takes you home. From a full-screen app or another Desktop it switches to the first Desktop; once you are
+    /// on it, it hides every other app (nothing is closed or moved) to show the bare desktop. Pressed again, it
+    /// brings back exactly what it hid.
     func toggleDesktop() {
         if !desktopHidden.isEmpty {
             let hidden = desktopHidden
             desktopHidden = []
             for pid in hidden { NSRunningApplication(processIdentifier: pid)?.unhide() }
             return
+        }
+        if let current = snapshot.spaces.first(where: \.isCurrent) {
+            let home = snapshot.spaces.filter { $0.displayID == current.displayID && $0.kind == .desktop }.min { $0.index < $1.index }
+            if let home, home.id != current.id {
+                provider.switchTo(home)
+                return
+            }
         }
         let me = ProcessInfo.processInfo.processIdentifier
         let apps = NSWorkspace.shared.runningApplications.filter {
