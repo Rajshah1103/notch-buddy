@@ -137,7 +137,7 @@ struct SwitcherView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, 16)
                 Color.clear.frame(width: g.collapsedSize.width)
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     // The buddy keeps you company here too, wearing whatever mood is live.
                     let look = LiveView.look(for: live.current)
                     // Only drawn (and so only ticking) while the notch is open; the hidden view must cost nothing.
@@ -146,9 +146,14 @@ struct SwitcherView: View {
                         else { Color.clear.frame(width: 22, height: 22) }
                     }
                     SearchButton { notch.setSearching(true) }
+                    DesktopButton(back: !model.desktopHidden.isEmpty) {
+                        model.toggleDesktop()
+                        notch.collapse()
+                    }
                     Text(summary)
                         .font(.system(size: 11, weight: .medium).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1).minimumScaleFactor(0.75).layoutPriority(-1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 16)
@@ -617,6 +622,30 @@ private struct PreviewPane: View {
 
 // MARK: - Search
 
+/// Takes you home: hides every other app to reveal the desktop, and brings them back on the next press.
+private struct DesktopButton: View {
+    let back: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: back ? "arrow.uturn.backward" : "desktopcomputer").font(.system(size: 10, weight: .semibold))
+                Text(back ? "Back" : "Desktop").font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(Theme.textSecondary)
+            .padding(.horizontal, 9)
+            .frame(height: 20)
+            .background(Capsule().fill(hovering ? Theme.fillHover : Theme.fillQuiet))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressStyle())
+        .pointerHover { hovering = $0 }
+        .accessibilityLabel(back ? "Bring your apps back" : "Show the desktop")
+    }
+}
+
 private struct SearchButton: View {
     let action: () -> Void
     @State private var hovering = false
@@ -628,6 +657,7 @@ private struct SearchButton: View {
                 Text("Search").font(.system(size: 11, weight: .medium))
                 Text("⌃⌥Space").font(.system(size: 10)).foregroundStyle(Theme.textSecondary.opacity(0.8))
             }
+            .fixedSize()
             .foregroundStyle(Theme.textSecondary)
             .padding(.horizontal, 9)
             .frame(height: 20)

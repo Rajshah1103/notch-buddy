@@ -309,6 +309,27 @@ final class WindowsModel: ObservableObject {
         provider.switchTo(space)
     }
 
+    /// Apps hidden by "Desktop", so the same button can bring them back.
+    @Published private(set) var desktopHidden: [pid_t] = []
+
+    /// Shows the desktop: hides every other app (nothing is closed or moved) and puts Finder forward.
+    /// Pressed again, it brings back exactly what it hid.
+    func toggleDesktop() {
+        if !desktopHidden.isEmpty {
+            let hidden = desktopHidden
+            desktopHidden = []
+            for pid in hidden { NSRunningApplication(processIdentifier: pid)?.unhide() }
+            return
+        }
+        let me = ProcessInfo.processInfo.processIdentifier
+        let apps = NSWorkspace.shared.runningApplications.filter {
+            $0.activationPolicy == .regular && !$0.isHidden && $0.processIdentifier != me && $0.bundleIdentifier != "com.apple.finder"
+        }
+        desktopHidden = apps.map(\.processIdentifier)
+        for app in apps { app.hide() }
+        NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first?.activate()
+    }
+
     /// For the snapshot tool: an icon for an invented app.
     func setPreviewIcon(_ image: NSImage, for pid: Int32) { icons[pid] = image }
     private var previewBundleIDs: [Int32: String] = [:]
