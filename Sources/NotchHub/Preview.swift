@@ -133,6 +133,33 @@ enum Preview {
         }
     }
 
+    /// Every antic across the ears at five moments, on black, so the choreography can be checked without a screen.
+    static func renderIdleSheet(to path: String) {
+        _ = NSApplication.shared
+        let notch: CGFloat = 179, extra = LiveLayout.idleExtra
+        let rows = VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(Antic.allCases.enumerated()), id: \.offset) { _, antic in
+                HStack(spacing: 14) {
+                    Text("\(antic)").font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.7)).frame(width: 70, alignment: .leading)
+                    ForEach(0..<6, id: \.self) { step in
+                        let scene = IdleScene(antic: antic, variant: 0, start: .now)
+                        IdleBuddy(scene: scene, extra: extra, notchWidth: notch, showText: true, fixedTime: antic.duration * Double(step) / 5)
+                            .frame(width: notch + 2 * extra, height: 32)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Color(white: 0.04)))
+                            .overlay(alignment: .center) { RoundedRectangle(cornerRadius: 3).fill(Color(white: 0.2)).frame(width: notch, height: 32) }
+                    }
+                }
+            }
+        }
+        .padding(20).background(Color(white: 0.12))
+        let renderer = ImageRenderer(content: rows)
+        renderer.scale = 1.5
+        if let image = renderer.nsImage, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+            print("Wrote \(path)")
+        }
+    }
+
     /// Renders the Settings or Welcome window content offscreen.
     static func renderWindow(_ name: String, to path: String, light: Bool) {
         _ = NSApplication.shared

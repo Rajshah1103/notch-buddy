@@ -209,6 +209,10 @@ if let flag = CommandLine.arguments.firstIndex(of: "--window"), flag + 2 < Comma
     exit(0)
 }
 
+if let flag = CommandLine.arguments.firstIndex(of: "--idle-sheet"), flag + 1 < CommandLine.arguments.count {
+    MainActor.assumeIsolated { Preview.renderIdleSheet(to: CommandLine.arguments[flag + 1]) }
+    exit(0)
+}
 if let flag = CommandLine.arguments.firstIndex(of: "--buddy-sheet"), flag + 1 < CommandLine.arguments.count {
     MainActor.assumeIsolated { Preview.renderBuddySheet(to: CommandLine.arguments[flag + 1]) }
     exit(0)
