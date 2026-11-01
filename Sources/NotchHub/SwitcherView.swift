@@ -698,8 +698,20 @@ private struct SearchPanel: View {
         }
     }
 
+    /// The profile a search will open in. One you moved to with the arrows wins; otherwise the Settings choice:
+    /// a fixed profile, nothing preselected ("ask each time"), or the one picked last time.
     private var activeProfile: BrowserProfile? {
-        web.profiles.first { $0.directory == profileDirectory } ?? web.defaultProfile(preferred: settings.webProfile)
+        if let moved = web.profiles.first(where: { $0.directory == profileDirectory }) { return moved }
+        switch settings.linkProfiles["search"] {
+        case LinkOpener.ask?: return nil
+        case let directory?: return web.profiles.first { $0.directory == directory } ?? web.defaultProfile(preferred: settings.webProfile)
+        case nil: return web.defaultProfile(preferred: settings.webProfile)
+        }
+    }
+
+    /// With "ask each time" and several profiles, a search waits until one is chosen.
+    private var mustChooseProfile: Bool {
+        settings.linkProfiles["search"] == LinkOpener.ask && web.profiles.count > 1
     }
 
     var body: some View {
@@ -787,14 +799,25 @@ private struct SearchPanel: View {
         }
         .onKeyPress(keys: [.return], phases: .down) { press in
             if press.modifiers.contains(.command), let action {
+                if mustChooseProfile && activeProfile == nil { return .handled }
                 openWeb(action, activeProfile)       // always search the web, even when something matches
                 return .handled
             }
             switch current {
             case .result(let result)?: onOpen(result.entry)
-            case .web(let action)?: openWeb(action, activeProfile)
+            case .web(let action)?:
+                // "Ask each time": Enter waits for a pick (a click, or Command and a number).
+                if mustChooseProfile && activeProfile == nil { return .handled }
+                openWeb(action, activeProfile)
             case nil: break
             }
+            return .handled
+        }
+        .onKeyPress(keys: Set("123456789".map { KeyEquivalent($0) }), phases: .down) { press in
+            // Command and a number opens the web row in that profile at once, with no Enter.
+            guard press.modifiers.contains(.command), case .web(let action)? = current,
+                  let number = Int(String(press.characters)), web.profiles.indices.contains(number - 1) else { return .ignored }
+            openWeb(action, web.profiles[number - 1])
             return .handled
         }
         .onKeyPress(keys: [KeyEquivalent("w")], phases: .down) { press in
@@ -913,10 +936,11 @@ private struct ProfilePicker: View {
                 .lineLimit(2).truncationMode(.middle)
 
             if profiles.count > 1 {
-                Text("Open as").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textSecondary).padding(.top, 4)
+                Text(selected == nil ? "Choose a profile to open it" : "Open as · Return to confirm, or press ⌘ and a number")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.textSecondary).padding(.top, 4)
                 VStack(spacing: 2) {
-                    ForEach(profiles.prefix(visible)) { profile in
-                        ProfileRow(profile: profile, isSelected: profile.id == selected?.id,
+                    ForEach(Array(profiles.prefix(visible).enumerated()), id: \.element.id) { index, profile in
+                        ProfileRow(profile: profile, isSelected: profile.id == selected?.id, number: index + 1,
                                    onHover: { onHighlight(profile) }, onPick: { onPick(profile) })
                     }
                     if profiles.count > visible {
@@ -938,6 +962,7 @@ private struct ProfilePicker: View {
 private struct ProfileRow: View {
     let profile: BrowserProfile
     let isSelected: Bool
+    var number: Int?
     let onHover: () -> Void
     let onPick: () -> Void
     @State private var isHovered = false
@@ -953,6 +978,7 @@ private struct ProfileRow: View {
                     }
                 }
                 Spacer(minLength: 0)
+                if let number { Text("⌘\(number)").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.textSecondary.opacity(0.8)) }
                 if isSelected { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.accent) }
             }
             .padding(.horizontal, 8)

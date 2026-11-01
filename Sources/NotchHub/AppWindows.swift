@@ -153,6 +153,22 @@ struct SettingsView: View {
     let diagnostics: () -> String
     @State private var copiedDiagnostics = false
 
+    @State private var profiles: [BrowserProfile] = []
+
+    private func profileChoice(_ key: String) -> Binding<String> {
+        Binding(get: { settings.linkProfiles[key] ?? "" }, set: { settings.linkProfiles[key] = $0.isEmpty ? nil : $0 })
+    }
+
+    private func profilePicker(_ title: String, _ key: String) -> some View {
+        Picker(title, selection: profileChoice(key)) {
+            Text(key == "search" ? "The one I picked last" : "Chrome's default").tag("")
+            ForEach(profiles) { profile in
+                Text(profile.email.map { "\(profile.name) · \($0)" } ?? profile.name).tag(profile.directory)
+            }
+            Text("Ask me each time").tag(LinkOpener.ask)
+        }
+    }
+
     @State private var githubStatus = "Checking…"
     @State private var hasGitHubToken = false
 
@@ -175,6 +191,7 @@ struct SettingsView: View {
             integrations.tabItem { Label("Integrations", systemImage: "puzzlepiece.extension") }
             permissionsTab.tabItem { Label("Permissions", systemImage: "lock.shield") }
         }
+        .task { profiles = await Task.detached { WebBrowser.installedProfiles() }.value }
         .frame(width: 540, height: 500)
         .onAppear { permissions.startPolling(); loadGitHubStatus() }
         .onChange(of: settings.githubUsesCommandLine) { loadGitHubStatus() }
@@ -270,6 +287,17 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Your buddy reacts in the notch and a small bubble drops down for new mail, finished or broken builds, review requests, Claude needing you, and meetings. Turn it off to keep only the quiet ears.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            if profiles.count > 1 {
+                Section("Browser profile for links") {
+                    profilePicker("Web searches from the notch", "search")
+                    profilePicker("GitHub pull requests", "github")
+                    profilePicker("Gmail", "gmail")
+                    profilePicker("Jenkins builds", "jenkins")
+                    profilePicker("Meeting links", "calendar")
+                    Text("Links open in the profile you choose here, so a work link never lands in your personal Chrome. \"Ask me each time\" shows a small menu at the pointer.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Section("Claude Code") {
                 Toggle("Show activity in the notch", isOn: $settings.showClaudeActivity)

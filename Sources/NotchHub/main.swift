@@ -18,6 +18,13 @@ if CommandLine.arguments.contains("--dump") {
     exit(0)
 }
 
+// `NotchHub --link-profiles` prints the saved choice per integration (folder names only) and how many profiles exist.
+if CommandLine.arguments.contains("--link-profiles") {
+    let saved = UserDefaults.standard.dictionary(forKey: "linkProfiles") as? [String: String] ?? [:]
+    print("profiles:", WebBrowser.installedProfiles().count, "choices:", saved.isEmpty ? "none (browser default)" : saved.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))
+    exit(0)
+}
+
 // `NotchHub --go-home` does what the Desktop button does and reports what happened. It moves your screen.
 if CommandLine.arguments.contains("--go-home") {
     let provider = SystemWindowProvider()
