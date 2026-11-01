@@ -28,6 +28,6 @@ final class CalendarModel: ObservableObject {
 
     func join(_ meeting: Meeting) {
         guard let url = meeting.joinURL else { return }
-        NSWorkspace.shared.open(url)
+        LinkOpener.open(url, for: "calendar")
     }
 }

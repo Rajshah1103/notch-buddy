@@ -107,7 +107,7 @@ private struct Inbox: View {
     }
 
     private var inboxURL: URL? { URL(string: "https://mail.google.com/mail/?authuser=\(snapshot.email)#inbox") }
-    private func open(_ url: URL?) { if let url { NSWorkspace.shared.open(url) } }
+    private func open(_ url: URL?) { if let url { LinkOpener.open(url, for: "gmail") } }
 }
 
 private struct MessageRow: View {

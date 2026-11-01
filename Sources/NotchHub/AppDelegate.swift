@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import BuddyKit
 import ClaudeUsage
 import NotchCore
 import SwiftUI
@@ -51,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         moments.onBubble = { [weak self] size in self?.notch?.setBubble(size: size) }
         notch?.setBubbleHover { [weak self] inside in self?.moments.setHeld(inside) }
         moments.onActivate = { [weak self] moment, action in
-            if action, let url = moment.url { NSWorkspace.shared.open(url) }
+            if action, let url = moment.url { LinkOpener.open(url, for: Self.linkKey(moment.source)) }
             else if let panel = moment.panel { self?.notch?.openPanel(panel) }
         }
         bridge = BuddyBridge(center: moments, claude: claude, gmail: gmail, jenkins: jenkins, github: github, calendar: calendar)
@@ -67,6 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.startTrackingRecents()
         model.startTrackingSpaces()
         model.startWatchingTabs()
+        LinkOpener.browser = web
+        web.reload()
         notch?.start()
         // Debug: NOTCHHUB_DEMO_MOMENT=gmail|build-ok|build-fail|review|checks-bad|meeting|claude-done|claude-approve shows an
         // invented bubble a moment after launch, so the real window can be checked without any real mail or builds.
@@ -128,6 +131,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Windows
+
+    /// Which setting decides the browser profile for a bubble's link.
+    private static func linkKey(_ source: MomentSource) -> String {
+        switch source {
+        case .gmail: return "gmail"
+        case .github: return "github"
+        case .build: return "jenkins"
+        case .calendar: return "calendar"
+        default: return "other"
+        }
+    }
 
     @objc private func showSettings() {
         presenter.show("settings", title: "Notch Hub Settings") {

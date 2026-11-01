@@ -10,9 +10,15 @@ final class WebBrowser: ObservableObject {
     private(set) var bundleID: String?
 
     /// The first installed Chromium browser. Only these can open a tab in a chosen profile.
-    private static let candidates = ["com.google.Chrome", "com.brave.Browser", "com.microsoft.edgemac"]
+    nonisolated private static let candidates = ["com.google.Chrome", "com.brave.Browser", "com.microsoft.edgemac"]
 
     private var isPreview = false
+
+    /// The profiles of the first installed Chromium browser, read straight from its files.
+    nonisolated static func installedProfiles() -> [BrowserProfile] {
+        guard let id = candidates.first(where: { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil }) else { return [] }
+        return BrowserProfiles.load(bundleID: id).profiles
+    }
 
     func reload() {
         guard !isPreview else { return }       // design renders use invented profiles, never the real ones

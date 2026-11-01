@@ -166,7 +166,7 @@ private struct BuildRow: View {
 
     var body: some View {
         Button {
-            NSWorkspace.shared.open(job.url)
+            LinkOpener.open(job.url, for: "jenkins")
             dismiss()
         } label: {
             HStack(spacing: 10) {

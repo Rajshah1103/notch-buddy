@@ -144,7 +144,7 @@ private struct PullRequestRow: View {
 
     var body: some View {
         Button {
-            NSWorkspace.shared.open(pr.url)
+            LinkOpener.open(pr.url, for: "github")
             dismiss()
         } label: {
             HStack(spacing: 10) {

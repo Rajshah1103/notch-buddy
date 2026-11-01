@@ -73,6 +73,9 @@ final class AppSettings: ObservableObject {
     @Published var idleBuddy: Bool { didSet { defaults.set(idleBuddy, forKey: "idleBuddy"); changed() } }
     /// Whether it says a word or two while it does.
     @Published var idleBuddyText: Bool { didSet { defaults.set(idleBuddyText, forKey: "idleBuddyText"); changed() } }
+    /// Which browser profile each integration's links open in: a profile folder, "ask", or no entry for the
+    /// browser's own default. Keys are "search", "github", "gmail", "jenkins", "calendar".
+    @Published var linkProfiles: [String: String] { didSet { defaults.set(linkProfiles, forKey: "linkProfiles") } }
     @Published var showGmail: Bool { didSet { defaults.set(showGmail, forKey: "showGmail"); changed() } }
     @Published var showCalendar: Bool { didSet { defaults.set(showCalendar, forKey: "showCalendar"); changed() } }
     @Published var showJenkins: Bool { didSet { defaults.set(showJenkins, forKey: "showJenkins"); changed() } }
@@ -103,6 +106,7 @@ final class AppSettings: ObservableObject {
         showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
         githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true
         showBubbles = defaults.object(forKey: "showBubbles") as? Bool ?? true
+        linkProfiles = defaults.dictionary(forKey: "linkProfiles") as? [String: String] ?? [:]
         idleBuddy = defaults.object(forKey: "idleBuddy") as? Bool ?? true
         idleBuddyText = defaults.object(forKey: "idleBuddyText") as? Bool ?? true
         showGmail = defaults.bool(forKey: "showGmail")       // off until chosen: it needs the user's own Google client
