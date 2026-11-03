@@ -22,7 +22,9 @@ let package = Package(
         .target(name: "GmailKit"),
         // The buddy: moods, how the blob moves, and the rules for which event gets announced and when.
         .target(name: "BuddyKit"),
-        .executableTarget(name: "NotchHub", dependencies: ["WindowEngine", "NotchCore", "ClaudeUsage", "GitHubKit", "JenkinsKit", "CalendarKit", "GmailKit", "BuddyKit"]),
+        // Lets scripts, harness hooks and connectors talk to the app: a local socket and its message format.
+        .target(name: "ConnectorKit"),
+        .executableTarget(name: "NotchHub", dependencies: ["ConnectorKit", "WindowEngine", "NotchCore", "ClaudeUsage", "GitHubKit", "JenkinsKit", "CalendarKit", "GmailKit", "BuddyKit"]),
         .testTarget(name: "WindowEngineTests", dependencies: ["WindowEngine"]),
         .testTarget(name: "ClaudeUsageTests", dependencies: ["ClaudeUsage"]),
         .testTarget(name: "GitHubKitTests", dependencies: ["GitHubKit"]),
@@ -30,5 +32,6 @@ let package = Package(
         .testTarget(name: "CalendarKitTests", dependencies: ["CalendarKit"]),
         .testTarget(name: "GmailKitTests", dependencies: ["GmailKit"]),
         .testTarget(name: "BuddyKitTests", dependencies: ["BuddyKit"]),
+        .testTarget(name: "ConnectorKitTests", dependencies: ["ConnectorKit"]),
     ]
 )
