@@ -75,6 +75,8 @@ final class AppSettings: ObservableObject {
     @Published var idleBuddyText: Bool { didSet { defaults.set(idleBuddyText, forKey: "idleBuddyText"); changed() } }
     /// Which browser profile each integration's links open in: a profile folder, "ask", or no entry for the
     /// browser's own default. Keys are "search", "github", "gmail", "jenkins", "calendar".
+    /// Ids of the connectors the user turned on. Nothing runs until it is listed here.
+    @Published var enabledConnectors: Set<String> { didSet { defaults.set(Array(enabledConnectors).sorted(), forKey: "enabledConnectors"); changed() } }
     @Published var linkProfiles: [String: String] { didSet { defaults.set(linkProfiles, forKey: "linkProfiles") } }
     @Published var showGmail: Bool { didSet { defaults.set(showGmail, forKey: "showGmail"); changed() } }
     @Published var showCalendar: Bool { didSet { defaults.set(showCalendar, forKey: "showCalendar"); changed() } }
@@ -106,6 +108,7 @@ final class AppSettings: ObservableObject {
         showGitHub = defaults.object(forKey: "showGitHub") as? Bool ?? true
         githubUsesCommandLine = defaults.object(forKey: "githubUsesCommandLine") as? Bool ?? true
         showBubbles = defaults.object(forKey: "showBubbles") as? Bool ?? true
+        enabledConnectors = Set(defaults.stringArray(forKey: "enabledConnectors") ?? [])
         linkProfiles = defaults.dictionary(forKey: "linkProfiles") as? [String: String] ?? [:]
         idleBuddy = defaults.object(forKey: "idleBuddy") as? Bool ?? true
         idleBuddyText = defaults.object(forKey: "idleBuddyText") as? Bool ?? true

@@ -26,7 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         JenkinsIntegration(model: jenkins),
         CalendarIntegration(model: calendar),
         GmailIntegration(model: gmail),
-    ])
+    ] + ConnectorStore.load().map { found in
+        ConnectorIntegration(model: ConnectorModel(found: found) { [moments] in moments.post(ExternalMoments.moment(from: $0)) })
+    })
     private let settings = AppSettings.shared
     private let presenter = WindowPresenter()
     private var notch: NotchManager?
