@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import GitHubKit
+import ConnectorKit
 import JenkinsKit
 import SwiftUI
 import WindowEngine
@@ -342,6 +343,7 @@ struct SettingsView: View {
                 Toggle("Show builds", isOn: $settings.showJenkins)
                 if settings.showJenkins { JenkinsSettings(settings: settings) }
             }
+            ConnectorsSection(settings: settings)
         }
         .formStyle(.grouped)
     }
@@ -510,4 +512,69 @@ final class WindowPresenter {
     }
 
     func close(_ id: String) { windows[id]?.close() }
+}
+
+// MARK: - Connectors
+
+private struct ConnectorsSection: View {
+    @ObservedObject var settings: AppSettings
+    @State private var found: [ConnectorStore.Found] = []
+
+    var body: some View {
+        Section {
+            if found.isEmpty {
+                Text("No connectors installed. A connector is a folder with a connector.json and a script. Anything that prints a list of items can become a chip in the notch.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(found) { item in
+                ConnectorRow(settings: settings, found: item)
+            }
+            HStack {
+                Button("Open connectors folder") {
+                    try? FileManager.default.createDirectory(at: ConnectorStore.directory, withIntermediateDirectories: true)
+                    NSWorkspace.shared.open(ConnectorStore.directory)
+                }
+                Button("Guide") { NSWorkspace.shared.open(URL(string: "https://github.com/Rajshah1103/notch-buddy/blob/main/docs/extending.md")!) }
+            }
+        } header: {
+            Text("Connectors")
+        } footer: {
+            Text("A connector's script runs on your Mac only after you turn it on here, with your user's permissions. Only turn on ones you trust. New folders appear after restarting Notch Hub.")
+        }
+        .onAppear { found = ConnectorStore.load() }
+    }
+}
+
+private struct ConnectorRow: View {
+    @ObservedObject var settings: AppSettings
+    let found: ConnectorStore.Found
+    @State private var secret = ""
+    @State private var hasSecret = false
+
+    private var manifest: Manifest { found.manifest }
+    private var enabled: Binding<Bool> {
+        Binding(get: { settings.enabledConnectors.contains(manifest.id) },
+                set: { on in if on { settings.enabledConnectors.insert(manifest.id) } else { settings.enabledConnectors.remove(manifest.id) } })
+    }
+
+    var body: some View {
+        Toggle(isOn: enabled) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(manifest.name)
+                Text(manifest.about ?? "Runs \(manifest.run.joined(separator: " ")) every \(Int(manifest.seconds)) seconds.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        if enabled.wrappedValue, let name = manifest.secret {
+            HStack {
+                SecureField(name, text: $secret, prompt: Text(hasSecret ? "Saved in your Keychain" : "Paste the value for \(name)"))
+                Button("Save") {
+                    ConnectorSecret.save(secret.trimmingCharacters(in: .whitespacesAndNewlines), for: manifest.id)
+                    secret = ""; hasSecret = true
+                }.disabled(secret.isEmpty)
+                if hasSecret { Button("Remove") { ConnectorSecret.clear(manifest.id); hasSecret = false } }
+            }
+            .onAppear { hasSecret = ConnectorSecret.read(manifest.id) != nil }
+        }
+    }
 }
