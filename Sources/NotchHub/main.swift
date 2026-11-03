@@ -1,8 +1,21 @@
 import AppKit
 import ClaudeUsage
+import ConnectorKit
 import GitHubKit
 import JenkinsKit
 import WindowEngine
+
+// `notchhub emit --source gitlab --headline "Pipeline failed" [--detail ..] [--url ..] [--tint #RRGGBB]` shows a bubble
+// in the running app; `notchhub agent --harness codex --session s1 --state working` reports an AI harness.
+if let verb = CommandLine.arguments.dropFirst().first, verb == "emit" || verb == "agent" {
+    do {
+        try Client.send(Client.object(type: verb == "emit" ? "moment" : "agent", arguments: Array(CommandLine.arguments.dropFirst(2))))
+        exit(0)
+    } catch {
+        FileHandle.standardError.write(Data("Notch Hub is not running (or the message was too long).\n".utf8))
+        exit(1)
+    }
+}
 
 // `NotchHub --dump` prints what the window engine sees and exits (handy for debugging).
 if CommandLine.arguments.contains("--dump") {

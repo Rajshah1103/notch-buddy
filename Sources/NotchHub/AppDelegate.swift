@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import BuddyKit
+import ConnectorKit
 import ClaudeUsage
 import NotchCore
 import SwiftUI
@@ -17,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let gmail = GmailModel()
     private let moments = MomentCenter()
     private var bridge: BuddyBridge?
+    private var socket: SocketServer?
     private lazy var live = LiveActivityModel(claude: claude, jenkins: jenkins, calendar: calendar)
     private lazy var hub = IntegrationHub(integrations: [
         ClaudeIntegration(model: claude),
@@ -55,6 +57,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if action, let url = moment.url { LinkOpener.open(url, for: Self.linkKey(moment.source)) }
             else if let panel = moment.panel { self?.notch?.openPanel(panel) }
         }
+        socket = SocketServer { [weak self] message in
+            MainActor.assumeIsolated {
+                if case .moment(let incoming) = message { self?.moments.post(ExternalMoments.moment(from: incoming)) }
+            }
+        }
+        socket?.start()
         bridge = BuddyBridge(center: moments, claude: claude, gmail: gmail, jenkins: jenkins, github: github, calendar: calendar)
         PerfProbe.startStallWatchdog()
 
