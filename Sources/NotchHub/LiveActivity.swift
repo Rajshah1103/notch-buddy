@@ -263,6 +263,7 @@ struct LiveView: View {
         case .calendar: return Theme.accent
         case .build: return .orange
         case .slack: return Color(red: 0.88, green: 0.3, blue: 0.6)
+        default: return moment.tintHex.flatMap { Color(hex: $0) } ?? Theme.accent
         }
     }
 

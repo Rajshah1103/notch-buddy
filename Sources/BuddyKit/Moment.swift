@@ -1,7 +1,18 @@
 import Foundation
 
-public enum MomentSource: String, Sendable {
-    case claude, gmail, build, github, calendar, slack
+/// Where a moment comes from. Open on purpose: the built-in sources are constants, and a connector or a
+/// script brings its own id (`MomentSource("gitlab")`).
+public struct MomentSource: RawRepresentable, Hashable, Sendable {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+    public init(_ id: String) { self.rawValue = id }
+
+    public static let claude = MomentSource("claude")
+    public static let gmail = MomentSource("gmail")
+    public static let build = MomentSource("build")
+    public static let github = MomentSource("github")
+    public static let calendar = MomentSource("calendar")
+    public static let slack = MomentSource("slack")
 }
 
 /// Something worth announcing: a short-lived event the buddy reacts to and a bubble describes.
@@ -27,13 +38,15 @@ public struct Moment: Equatable, Identifiable, Sendable {
     public let url: URL?
     /// The integration panel a click opens (its id), when the event belongs to one.
     public let panel: String?
+    /// A colour of its own as `#RRGGBB`, for sources the app does not know.
+    public let tintHex: String?
 
     public init(id: String, source: MomentSource, mood: Mood, headline: String, detail: String? = nil, symbol: String,
                 priority: Int = 50, ttl: TimeInterval = 4.5, group: String? = nil, count: Int = 1,
-                manyHeadline: String? = nil, actionTitle: String? = nil, url: URL? = nil, panel: String? = nil) {
+                manyHeadline: String? = nil, actionTitle: String? = nil, url: URL? = nil, panel: String? = nil, tintHex: String? = nil) {
         self.id = id; self.source = source; self.mood = mood; self.headline = headline; self.detail = detail
         self.symbol = symbol; self.priority = priority; self.ttl = ttl; self.group = group; self.count = count
-        self.manyHeadline = manyHeadline; self.actionTitle = actionTitle; self.url = url; self.panel = panel
+        self.manyHeadline = manyHeadline; self.actionTitle = actionTitle; self.url = url; self.panel = panel; self.tintHex = tintHex
     }
 }
 
