@@ -1,9 +1,23 @@
-# Notch Hub (working name)
+# Notch Buddy
+
+A macOS app that turns the notch into a live hub with a small buddy that tells you what needs you. (The app and its
+code are still called Notch Hub internally.)
 
 Turns the Mac notch into a live hub: hover to see your apps and what is inside them (windows, browser
 tabs), jump to any of them in one click, or press **Control-Option-Space** and type to find anything open.
 While Claude Code is working, the collapsed notch widens into a live activity.
 Product plan: `docs/prd-and-execution-plan.md`.
+
+## Connect any app
+
+Anything that can run a command can show a bubble on the notch. The app listens on a Unix socket that only your
+user can open (no network port), and `NotchHub emit` talks to it:
+
+    NotchHub emit --source gitlab --headline "Pipeline failed" --detail "main" --url https://example.com --tint "#FC6D26"
+
+`--source` and `--headline` are required; `--detail`, `--url` (http or https), `--tint`, `--mood`, `--symbol`, `--ttl`,
+`--group` and `--id` are optional. `NotchHub agent --harness codex --session s1 --state working` already reaches the
+app, but the notch does not show agent activity yet. More (connectors, harness recipes) is planned.
 
 ## Install and run
 
