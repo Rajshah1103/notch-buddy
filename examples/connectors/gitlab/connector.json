@@ -1,0 +1,10 @@
+{
+  "id": "gitlab",
+  "name": "GitLab",
+  "symbol": "arrow.triangle.merge",
+  "tint": "#FC6D26",
+  "run": ["./fetch.sh"],
+  "interval": 120,
+  "secret": "GITLAB_TOKEN",
+  "about": "Merge requests waiting for your review, and your own merge requests with a failing pipeline."
+}

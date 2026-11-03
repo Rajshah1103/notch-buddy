@@ -1,0 +1,11 @@
+{
+  "url": "https://example.com/api/status",
+  "list": "items",
+  "title": "name",
+  "subtitle": "description",
+  "status": "state",
+  "link": "url",
+  "failing": ["failed", "error", "down"],
+  "pending": ["waiting", "pending"],
+  "running": ["running", "in_progress"]
+}

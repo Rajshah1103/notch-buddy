@@ -1,0 +1,9 @@
+{
+  "id": "rest-json",
+  "name": "REST status",
+  "symbol": "antenna.radiowaves.left.and.right",
+  "run": ["./fetch.sh"],
+  "interval": 60,
+  "secret": "API_TOKEN",
+  "about": "Shows any JSON list from a URL. Edit config.json to say where it is and which fields to use."
+}
