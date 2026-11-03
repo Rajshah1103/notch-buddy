@@ -53,3 +53,31 @@ struct RateLimitTests {
         #expect(limit.allow(now: 11))
     }
 }
+
+struct ConnectorTests {
+    private func manifest(_ text: String) -> Manifest? { try? Manifest.parse(Data(text.utf8)) }
+    private let sample = Manifest(id: "gl", name: "GitLab", symbol: nil, tint: "#FC6D26", run: ["./f.sh"], interval: nil, secret: nil, about: nil)
+
+    @Test func manifestsAreChecked() {
+        #expect(manifest(#"{"id":"gitlab","name":"GitLab","run":["./f.sh"]}"#) != nil)
+        #expect(manifest(#"{"id":"../x","name":"X","run":["a"]}"#) == nil)
+        #expect(manifest(#"{"id":"x","name":"X","run":[]}"#) == nil)
+        #expect(manifest(#"{"id":"x","name":"X","run":["a"],"interval":5}"#)?.seconds == 30)
+    }
+
+    @Test func itemsSkipUntitledRowsAndDefaultToOk() {
+        let items = Item.parse(Data(#"{"items":[{"title":"a","status":"failing"},{"status":"ok"},{"title":"b","status":"???"}]}"#.utf8))
+        #expect(items?.map(\.title) == ["a", "b"])
+        #expect(items?.map(\.status) == [.failing, .ok])
+        #expect(Item.parse(Data("nope".utf8)) == nil)
+    }
+
+    @Test func firstRunIsSilentAndChangesAnnounceOnce() {
+        let now = [Item(id: "1", title: "build", subtitle: nil, status: .failing, url: nil)]
+        #expect(Changes.moments(connector: sample, previous: nil, now: now).isEmpty)
+        #expect(Changes.moments(connector: sample, previous: ["1": .ok], now: now).map(\.headline) == ["build failed"])
+        #expect(Changes.moments(connector: sample, previous: Changes.statuses(now), now: now).isEmpty)
+        let fixed = [Item(id: "1", title: "build", subtitle: nil, status: .ok, url: nil)]
+        #expect(Changes.moments(connector: sample, previous: ["1": .failing], now: fixed).map(\.mood) == ["proud"])
+    }
+}
