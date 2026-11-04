@@ -98,7 +98,6 @@ private struct Builds: View {
     let snapshot: JenkinsSnapshot
     let error: JenkinsError?
     let dismiss: () -> Void
-    private let visibleRows = 6
 
     var body: some View {
         let relevant = snapshot.relevant()
@@ -120,8 +119,8 @@ private struct Builds: View {
             .padding(.horizontal, 4)
 
             HStack(alignment: .top, spacing: 14) {
-                BuildColumn(title: "Running and failing", jobs: attention, emptyText: "Nothing running or broken", limit: visibleRows, dismiss: dismiss)
-                BuildColumn(title: "Finished in the last day", jobs: recent, emptyText: "No recent builds", limit: visibleRows, dismiss: dismiss)
+                BuildColumn(title: "Running and failing", jobs: attention, emptyText: "Nothing running or broken", dismiss: dismiss)
+                BuildColumn(title: "Finished in the last day", jobs: recent, emptyText: "No recent builds", dismiss: dismiss)
             }
         }
     }
@@ -131,11 +130,9 @@ private struct BuildColumn: View {
     let title: String
     let jobs: [JenkinsJob]
     let emptyText: String
-    let limit: Int
     let dismiss: () -> Void
 
     var body: some View {
-        let shown = Array(jobs.prefix(limit))
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(title).font(.system(size: 11, weight: .semibold))
@@ -144,16 +141,18 @@ private struct BuildColumn: View {
             }
             .foregroundStyle(Theme.textSecondary).padding(.horizontal, 10).padding(.bottom, 4)
 
-            if jobs.isEmpty {
-                Text(emptyText).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
-                    .frame(maxWidth: .infinity).padding(.top, 36)
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if jobs.isEmpty {
+                        Text(emptyText).font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity).padding(.top, 36)
+                    }
+                    ForEach(jobs) { job in BuildRow(job: job, dismiss: dismiss) }
+                }
             }
-            ForEach(shown) { job in BuildRow(job: job, dismiss: dismiss) }
-            if jobs.count > shown.count {
-                Text("\(jobs.count - shown.count) more").font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Theme.textSecondary).padding(.horizontal, 10).frame(height: 28)
-            }
-            Spacer(minLength: 0)
+            .scrollIndicators(.hidden)
+            .mask(LinearGradient(stops: [.init(color: .black, location: 0.9), .init(color: .clear, location: 1)],
+                                     startPoint: .top, endPoint: .bottom))
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
