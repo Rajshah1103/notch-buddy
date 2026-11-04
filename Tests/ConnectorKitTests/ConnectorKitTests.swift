@@ -81,3 +81,39 @@ struct ConnectorTests {
         #expect(Changes.moments(connector: sample, previous: ["1": .failing], now: fixed).map(\.mood) == ["proud"])
     }
 }
+
+struct AgentBoardTests {
+    private func event(_ state: Message.AgentEvent.State, session: String = "s1", harness: String = "codex") -> Message.AgentEvent {
+        Message.AgentEvent(harness: harness, session: session, state: state, project: nil)
+    }
+
+    @Test func workingThenDoneLeavesNothing() {
+        var board = AgentBoard()
+        let t = Date(timeIntervalSince1970: 0)
+        #expect(board.apply(event(.working), now: t))
+        #expect(board.working.count == 1)
+        #expect(!board.apply(event(.working), now: t))            // same state again changes nothing visible
+        #expect(board.apply(event(.done), now: t))
+        #expect(board.sessions.isEmpty)
+    }
+
+    @Test func approvalIsKeptApartFromWorking() {
+        var board = AgentBoard()
+        let t = Date(timeIntervalSince1970: 0)
+        board.apply(event(.working, session: "a"), now: t)
+        board.apply(event(.needsApproval, session: "b", harness: "gemini"), now: t)
+        #expect(board.working.count == 1 && board.waiting.count == 1)
+        board.apply(event(.working, session: "b", harness: "gemini"), now: t)
+        #expect(board.waiting.isEmpty)
+    }
+
+    @Test func quietSessionsExpireAndTheBoardStaysSmall() {
+        var board = AgentBoard()
+        let t = Date(timeIntervalSince1970: 0)
+        board.apply(event(.working), now: t)
+        #expect(!board.prune(now: t.addingTimeInterval(60)))
+        #expect(board.prune(now: t.addingTimeInterval(AgentBoard.workingExpiry + 1)))
+        for n in 0..<50 { board.apply(event(.working, session: "x\(n)"), now: t) }
+        #expect(board.sessions.count == 20)
+    }
+}
