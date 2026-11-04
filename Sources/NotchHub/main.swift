@@ -183,6 +183,24 @@ if CommandLine.arguments.contains("--github") {
 if let flag = CommandLine.arguments.firstIndex(of: "--jenkins-save-token"), flag + 1 < CommandLine.arguments.count {
     JenkinsToken.save(CommandLine.arguments[flag + 1]); print("saved"); exit(0)
 }
+// `NotchHub --jenkins-check` runs the app's own fetch with the saved settings and prints counts only.
+if CommandLine.arguments.contains("--jenkins-check") {
+    let defaults = UserDefaults.standard
+    let done = DispatchSemaphore(value: 0)
+    Task {
+        let config = JenkinsModel.config(address: defaults.string(forKey: "jenkinsURL") ?? "", user: defaults.string(forKey: "jenkinsUser") ?? "",
+                                         filter: defaults.string(forKey: "jenkinsFilter") ?? "")
+        guard let config else { print("not configured (address, username or token missing)"); done.signal(); return }
+        let began = Date()
+        do {
+            let snapshot = try await JenkinsClient().fetch(config)
+            print("jobs \(snapshot.jobs.count), running \(snapshot.running.count), failing \(snapshot.failing.count), relevant \(snapshot.relevant().count), \(Int(Date().timeIntervalSince(began) * 1000)) ms")
+        } catch { print("error:", (error as? JenkinsError)?.message ?? "\(error)") }
+        done.signal()
+    }
+    done.wait()
+    exit(0)
+}
 if CommandLine.arguments.contains("--jenkins-clear-token") { JenkinsToken.clear(); print("cleared"); exit(0) }
 
 // `NotchHub --close-test-tab` closes any tab whose address contains "localhost:8089/nhtest", through the
