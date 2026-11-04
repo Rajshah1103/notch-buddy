@@ -18,9 +18,11 @@ public struct GmailSnapshot: Equatable {
     public let unread: Int
     /// The newest unread ones, newest first.
     public let messages: [GmailMessage]
+    /// Where the next page of older unread messages starts, when there are more than `messages` holds.
+    public let nextPage: String?
 
-    public init(email: String, unread: Int, messages: [GmailMessage]) {
-        self.email = email; self.unread = unread; self.messages = messages
+    public init(email: String, unread: Int, messages: [GmailMessage], nextPage: String? = nil) {
+        self.email = email; self.unread = unread; self.messages = messages; self.nextPage = nextPage
     }
 }
 

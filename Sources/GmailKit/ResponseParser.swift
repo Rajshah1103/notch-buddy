@@ -11,6 +11,11 @@ public enum ResponseParser {
         return list?.compactMap { $0["id"] as? String } ?? []
     }
 
+    /// Present when the list has more pages after this one.
+    public static func nextPageToken(fromList data: Data) -> String? {
+        (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["nextPageToken"] as? String
+    }
+
     public static func email(fromProfile data: Data) -> String? {
         (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["emailAddress"] as? String
     }

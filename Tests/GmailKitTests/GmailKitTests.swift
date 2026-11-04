@@ -53,3 +53,11 @@ struct AuthTests {
         #expect(LoopbackReceiver.parameters(inRequest: "GET /favicon.ico HTTP/1.1\r\n\r\n").isEmpty)
     }
 }
+
+struct PagingTests {
+    @Test func nextPageTokenIsReadWhenPresent() {
+        #expect(ResponseParser.nextPageToken(fromList: Data(#"{"messages":[{"id":"a"}],"nextPageToken":"T1"}"#.utf8)) == "T1")
+        #expect(ResponseParser.nextPageToken(fromList: Data(#"{"messages":[{"id":"a"}]}"#.utf8)) == nil)
+        #expect(ResponseParser.nextPageToken(fromList: Data("nope".utf8)) == nil)
+    }
+}

@@ -16,9 +16,17 @@ public struct GmailClient {
 
     public func snapshot(email: String, accessToken: String, limit: Int = 20) async throws -> GmailSnapshot {
         async let label = get("/labels/INBOX", accessToken)
-        async let list = get("/messages?q=is:unread%20in:inbox&maxResults=\(limit)", accessToken)
+        async let page = unreadPage(token: nil, limit: limit, accessToken)
         let unread = ResponseParser.unreadCount(fromLabel: try await label) ?? 0
-        let ids = ResponseParser.ids(fromList: try await list)
+        let (messages, next) = try await page
+        return GmailSnapshot(email: email, unread: unread, messages: messages, nextPage: next)
+    }
+
+    /// One page of unread inbox messages, newest first, and where the next page starts (nil at the end).
+    public func unreadPage(token: String?, limit: Int = 20, _ accessToken: String) async throws -> (messages: [GmailMessage], next: String?) {
+        let paging = token.flatMap { $0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) }.map { "&pageToken=\($0)" } ?? ""
+        let list = try await get("/messages?q=is:unread%20in:inbox&maxResults=\(limit)\(paging)", accessToken)
+        let ids = ResponseParser.ids(fromList: list)
 
         // One request per message, all at once; the order is restored from the list's.
         let fetched = try await withThrowingTaskGroup(of: GmailMessage?.self) { group -> [String: GmailMessage] in
@@ -31,7 +39,7 @@ public struct GmailClient {
             for try await message in group { if let message { found[message.id] = message } }
             return found
         }
-        return GmailSnapshot(email: email, unread: unread, messages: ids.compactMap { fetched[$0] })
+        return (ids.compactMap { fetched[$0] }, ResponseParser.nextPageToken(fromList: list))
     }
 
     private func get(_ path: String, _ accessToken: String) async throws -> Data {
