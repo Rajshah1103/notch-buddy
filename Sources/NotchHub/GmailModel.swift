@@ -15,6 +15,11 @@ final class GmailModel: ObservableObject {
     @Published private(set) var state = State.loading
     /// The last good read; kept while a refresh fails so the panel never goes blank.
     @Published private(set) var snapshot: GmailSnapshot?
+    /// Older unread messages loaded by scrolling to the end. Kept apart from `snapshot` so the buddy's
+    /// "new mail" detection never mistakes an old message for a new one.
+    @Published private(set) var older: [GmailMessage] = []
+    @Published private(set) var loadingMore = false
+    private var olderToken: String?
     @Published private(set) var error: GmailError?
 
     /// What was typed into the setup fields. Kept here, not in the view: the notch closes whenever you
@@ -109,7 +114,7 @@ final class GmailModel: ObservableObject {
 
     func disconnect() {
         timer?.invalidate(); timer = nil
-        credentials = nil; access = nil; snapshot = nil; error = nil
+        credentials = nil; access = nil; snapshot = nil; older = []; olderToken = nil; error = nil
         Task.detached { GmailCredentials.clear() }
         state = .needsSetup
     }
@@ -124,17 +129,35 @@ final class GmailModel: ObservableObject {
         return tokens.accessToken
     }
 
+    /// Whether scrolling to the end can load more.
+    var hasMore: Bool { olderToken != nil }
+
+    func loadMore() {
+        guard let token = olderToken, !loadingMore else { return }
+        loadingMore = true
+        Task {
+            defer { loadingMore = false }
+            guard let access = try? await validToken(),
+                  let page = try? await client.unreadPage(token: token, access) else { return }
+            let known = Set((snapshot?.messages ?? []).map(\.id) + older.map(\.id))
+            older += page.messages.filter { !known.contains($0.id) }
+            olderToken = page.next
+        }
+    }
+
     private func fetch() async {
         do {
             let token = try await validToken()
             let new = try await client.snapshot(email: credentials?.email ?? "", accessToken: token)
             lastFetch = Date()
             snapshot = new; error = nil
+            let fresh = Set(new.messages.map(\.id))
+            if older.isEmpty { olderToken = new.nextPage } else { older.removeAll { fresh.contains($0.id) } }
         } catch GmailError.signedOut {
             // Revoked, or a testing-mode login that has run out (they last a week): ask again.
             credentials?.refreshToken = nil
             if let credentials { Task.detached { credentials.save() } }
-            access = nil; snapshot = nil; timer?.invalidate(); timer = nil
+            access = nil; snapshot = nil; older = []; olderToken = nil; timer?.invalidate(); timer = nil
             state = .needsSignIn(note: "Your Gmail sign-in expired. Sign in again.")
         } catch let failure as GmailError {
             error = failure

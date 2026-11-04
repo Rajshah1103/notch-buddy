@@ -86,7 +86,7 @@ private struct Inbox: View {
             .padding(.horizontal, 4)
 
             ScrollView(.vertical) {
-                VStack(spacing: 2) {
+                LazyVStack(spacing: 2) {
                     if snapshot.messages.isEmpty {
                         Text("Inbox zero").font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
                             .frame(maxWidth: .infinity).padding(.top, 60)
@@ -97,16 +97,24 @@ private struct Inbox: View {
                             notch.collapse()
                         }
                     }
-                    if snapshot.unread > snapshot.messages.count {
-                        Text("\(snapshot.unread - snapshot.messages.count) more")
-                            .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                    ForEach(model.older) { message in
+                        MessageRow(message: message) {
+                            open(URL(string: "https://mail.google.com/mail/?authuser=\(snapshot.email)#inbox/\(message.id)"))
+                            notch.collapse()
+                        }
+                    }
+                    if model.hasMore {
+                        // Reaching the end of the list asks for the next page.
+                        Text("Loading more…").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).frame(height: 28)
+                            .id(model.older.count)       // a fresh row after each page, so it fires again
+                            .onAppear { model.loadMore() }
                     }
                 }
             }
-                .scrollIndicators(.hidden)
-                .mask(LinearGradient(stops: [.init(color: .black, location: 0.9), .init(color: .clear, location: 1)],
-                                     startPoint: .top, endPoint: .bottom))
+            .scrollIndicators(.hidden)
+            .mask(LinearGradient(stops: [.init(color: .black, location: 0.9), .init(color: .clear, location: 1)],
+                                 startPoint: .top, endPoint: .bottom))
         }
     }
 
