@@ -18,4 +18,19 @@ enum ExternalMoments {
                       ttl: min(max(incoming.ttl ?? 4.5, 2), 15), group: incoming.group,
                       actionTitle: url == nil ? nil : "Open", url: url, tintHex: incoming.tint)
     }
+
+    /// A bubble for the two moments in an AI session that want you: it needs approval, or it finished.
+    static func moment(from event: Message.AgentEvent) -> Moment? {
+        let name = AgentTracker.title(event.harness)
+        switch event.state {
+        case .needsApproval:
+            return Moment(id: "agent:\(event.harness):\(event.session):approval", source: MomentSource(event.harness.lowercased()), mood: .needsYou,
+                          headline: "\(name) needs your OK", detail: event.project, symbol: "hand.raised.fill", priority: 85, ttl: 7)
+        case .done:
+            return Moment(id: "agent:\(event.harness):\(event.session):done", source: MomentSource(event.harness.lowercased()), mood: .happy,
+                          headline: "\(name) finished", detail: event.project, symbol: "checkmark.circle.fill", priority: 60)
+        case .working, .idle:
+            return nil
+        }
+    }
 }

@@ -27,6 +27,8 @@ struct IdleScene: Equatable {
 final class LiveActivityModel: ObservableObject {
     enum Activity: Equatable {
         case claude(since: Date?, sessions: Int)
+        /// Another AI harness (Codex, Gemini, ...) working, reported by its hooks.
+        case agent(harness: String, since: Date?, sessions: Int)
         case waiting(count: Int, approval: Bool)
         case meeting(title: String, start: Date)
         case build(name: String, progress: Double?, count: Int)
@@ -58,6 +60,7 @@ final class LiveActivityModel: ObservableObject {
 
     private var subscriptions = Set<AnyCancellable>()
     private var claudeActivity = Activity.none
+    private var agentActivity = Activity.none
     private var waitingActivity = Activity.none
     private var buildActivity = Activity.none
     private var meetingActivity = Activity.none
@@ -66,7 +69,8 @@ final class LiveActivityModel: ObservableObject {
     /// How early a meeting claims the collapsed notch, and how long after its start it stays.
     private static let lead: TimeInterval = 5 * 60, linger: TimeInterval = 60
 
-    init(claude: ClaudeModel, jenkins: JenkinsModel, calendar: CalendarModel) {
+    init(claude: ClaudeModel, jenkins: JenkinsModel, calendar: CalendarModel, agents: AgentTracker? = nil) {
+        agents?.$board.sink { [weak self] _ in self?.agentsChanged(agents) }.store(in: &subscriptions)
         calendar.$state
             .sink { [weak self] state in
                 if case .ready(let list) = state { self?.meetings = list.filter { !$0.isAllDay } } else { self?.meetings = [] }
@@ -105,6 +109,21 @@ final class LiveActivityModel: ObservableObject {
             .store(in: &subscriptions)
     }
 
+    private var agentWaiting = Activity.none
+
+    /// `@Published` publishes before the value changes, so read the board a turn later.
+    private func agentsChanged(_ tracker: AgentTracker?) {
+        DispatchQueue.main.async { [weak self] in
+            guard let board = tracker?.board else { return }
+            let working = board.working, waiting = board.waiting
+            self?.agentActivity = working.isEmpty ? .none
+                : .agent(harness: working.count == 1 ? working[0].harness : "agents", since: working.map(\.since).min(), sessions: working.count)
+            self?.agentWaiting = waiting.isEmpty ? .none : .waiting(count: waiting.count, approval: true)
+            PerfProbe.log("agents: working \(working.count), waiting \(waiting.count)")
+            self?.recompute()
+        }
+    }
+
     /// Several sources can change in one turn of the run loop (Claude's snapshot, then who needs you); settle
     /// once afterwards so the ears never flash empty in between.
     private var recomputePending = false
@@ -122,8 +141,9 @@ final class LiveActivityModel: ObservableObject {
         let soon = meetings.filter { $0.start.addingTimeInterval(Self.linger) > now && $0.start.timeIntervalSince(now) <= Self.lead }
                            .min { $0.start < $1.start }
         meetingActivity = soon.map { .meeting(title: $0.title, start: $0.start) } ?? .none
-        let new: Activity = claudeActivity != .none ? claudeActivity : waitingActivity != .none ? waitingActivity : (meetingActivity != .none ? meetingActivity : buildActivity)
+        let new: Activity = claudeActivity != .none ? claudeActivity : agentActivity != .none ? agentActivity : waitingActivity != .none ? waitingActivity : agentWaiting != .none ? agentWaiting : (meetingActivity != .none ? meetingActivity : buildActivity)
         guard new != current else { return }
+        PerfProbe.log("live activity: \(new)")
         current = new
         if !canIdle { endIdle() }
         publishEars()
@@ -133,7 +153,7 @@ final class LiveActivityModel: ObservableObject {
     /// that wants you (an approval, a finished chat, a meeting) keeps the notch to itself.
     var canIdle: Bool {
         switch current {
-        case .none, .claude, .build: return true
+        case .none, .claude, .agent, .build: return true
         case .waiting, .meeting: return false
         }
     }
@@ -243,6 +263,7 @@ struct LiveView: View {
     static func look(for activity: LiveActivityModel.Activity) -> (mood: Mood, tint: Color)? {
         switch activity {
         case .claude: return (.working, Theme.claude)
+        case .agent: return (.working, Theme.accent)
         case .waiting(_, let approval): return approval ? (.needsYou, Theme.claude) : (.happy, .green)
         case .meeting: return (.clockWatching, Theme.accent)
         case .build: return (.working, .orange)
@@ -296,6 +317,11 @@ struct LiveView: View {
                 } else {
                     Text("cooking")
                 }
+            case .agent(_, let since, let sessions):
+                if sessions > 1 { Text("\u{00D7}\(sessions)") }
+                else if let since {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in Text(Self.clock(context.date.timeIntervalSince(since))) }
+                } else { Text("working") }
             case .waiting(let count, let approval):
                 Text(count > 1 ? "\u{00D7}\(count)" : (approval ? "ur ok?" : "ate that"))
             case .meeting(_, let start):
@@ -314,8 +340,9 @@ struct LiveView: View {
         if let moment = center.showing { return [moment.headline, moment.detail].compactMap { $0 }.joined(separator: ", ") }
         switch model.current {
         case .claude: return "Claude is working"
+        case .agent(let harness, _, let sessions): return sessions > 1 ? "\(sessions) AI sessions are working" : "\(AgentTracker.title(harness)) is working"
         case .waiting(let count, let approval):
-            return count > 1 ? "\(count) Claude chats need you" : (approval ? "Claude needs your approval" : "Claude finished")
+            return count > 1 ? "\(count) sessions need you" : (approval ? "A session needs your approval" : "A session finished")
         case .meeting(let title, let start): return "\(title), \(Schedule.countdown(to: start, from: Date()))"
         case .build(let name, let progress, _): return "Build \(name) running" + (progress.map { ", \(Int($0 * 100)) percent" } ?? "")
         case .none: return ""

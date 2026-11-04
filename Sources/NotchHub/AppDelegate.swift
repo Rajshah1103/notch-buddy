@@ -19,7 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let moments = MomentCenter()
     private var bridge: BuddyBridge?
     private var socket: SocketServer?
-    private lazy var live = LiveActivityModel(claude: claude, jenkins: jenkins, calendar: calendar)
+    private let agents = AgentTracker()
+    private lazy var live = LiveActivityModel(claude: claude, jenkins: jenkins, calendar: calendar, agents: agents)
     private lazy var hub = IntegrationHub(integrations: [
         ClaudeIntegration(model: claude),
         GitHubIntegration(model: github),
@@ -61,7 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         socket = SocketServer { [weak self] message in
             MainActor.assumeIsolated {
-                if case .moment(let incoming) = message { self?.moments.post(ExternalMoments.moment(from: incoming)) }
+                switch message {
+                case .moment(let incoming): self?.moments.post(ExternalMoments.moment(from: incoming))
+                case .agent(let event):
+                    self?.agents.apply(event)
+                    if let moment = ExternalMoments.moment(from: event) { self?.moments.post(moment) }
+                }
             }
         }
         socket?.start()
