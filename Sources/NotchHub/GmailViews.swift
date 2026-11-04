@@ -85,24 +85,28 @@ private struct Inbox: View {
             }
             .padding(.horizontal, 4)
 
-            VStack(spacing: 2) {
-                if snapshot.messages.isEmpty {
-                    Text("Inbox zero").font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
-                        .frame(maxWidth: .infinity).padding(.top, 60)
-                }
-                ForEach(snapshot.messages) { message in
-                    MessageRow(message: message) {
-                        open(URL(string: "https://mail.google.com/mail/?authuser=\(snapshot.email)#inbox/\(message.id)"))
-                        notch.collapse()
+            ScrollView(.vertical) {
+                VStack(spacing: 2) {
+                    if snapshot.messages.isEmpty {
+                        Text("Inbox zero").font(.system(size: 13)).foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity).padding(.top, 60)
+                    }
+                    ForEach(snapshot.messages) { message in
+                        MessageRow(message: message) {
+                            open(URL(string: "https://mail.google.com/mail/?authuser=\(snapshot.email)#inbox/\(message.id)"))
+                            notch.collapse()
+                        }
+                    }
+                    if snapshot.unread > snapshot.messages.count {
+                        Text("\(snapshot.unread - snapshot.messages.count) more")
+                            .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).frame(height: 28)
                     }
                 }
-                if snapshot.unread > snapshot.messages.count {
-                    Text("\(snapshot.unread - snapshot.messages.count) more")
-                        .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).frame(height: 28)
-                }
             }
-            Spacer(minLength: 0)
+                .scrollIndicators(.hidden)
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0.9), .init(color: .clear, location: 1)],
+                                     startPoint: .top, endPoint: .bottom))
         }
     }
 

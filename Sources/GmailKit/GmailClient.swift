@@ -14,7 +14,7 @@ public struct GmailClient {
         return email
     }
 
-    public func snapshot(email: String, accessToken: String, limit: Int = 8) async throws -> GmailSnapshot {
+    public func snapshot(email: String, accessToken: String, limit: Int = 20) async throws -> GmailSnapshot {
         async let label = get("/labels/INBOX", accessToken)
         async let list = get("/messages?q=is:unread%20in:inbox&maxResults=\(limit)", accessToken)
         let unread = ResponseParser.unreadCount(fromLabel: try await label) ?? 0
