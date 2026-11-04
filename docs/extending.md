@@ -61,5 +61,25 @@ one, copy its folder into the connectors folder and restart Notch Buddy.
 
 ## 3. AI harnesses
 
-`NotchHub agent --harness codex --session s1 --state working` reaches the app already (`working`, `needs-approval`,
-`done`, `idle`). The notch does not show agent activity from it yet. Claude Code is read directly from its own session files.
+Claude Code is read directly from its own session files, so it needs nothing. Any other harness can report to the
+notch with `NotchHub agent`:
+
+    NotchHub agent --harness codex --session s1 --state working
+
+`--state` is `working`, `needs-approval`, `done` or `idle`. While a session is `working` the collapsed notch shows
+it as live activity (with a count when several are running); `needs-approval` shows "ur ok?" and a bubble; `done`
+shows a "finished" bubble. A session that goes quiet is dropped after 20 minutes (an hour while waiting for you), so
+a missed `done` cannot leave the notch stuck. What you get depends on which events the harness can send:
+
+- **Codex CLI.** Its `notify` setting runs a program when a turn finishes, with the event as a JSON argument. That is
+  only a "finished" signal, so you get the bubble, not live activity. In `~/.codex/config.toml`:
+  `notify = ["/path/to/NotchHub", "agent", "--harness", "codex", "--session", "main", "--state", "done"]`.
+  Check Codex's current config reference, because the keys have changed between versions.
+- **Gemini CLI.** It has hooks in `settings.json`: `BeforeAgent` (a prompt was submitted), `AfterAgent` (the turn
+  ended) and `Notification`. Point `BeforeAgent` at `--state working` and `AfterAgent` at `--state done`. A hook's
+  standard output must be JSON, so end the command with `; echo '{}'`. Hooks may need enabling in your version; see
+  the [Gemini CLI hooks docs](https://geminicli.com/docs/hooks/).
+- **Anything else** that can run a command on "started", "needs you" and "finished" can do the same. I have not
+  tried Aider or OpenCode, so there is no recipe for them yet.
+
+These recipes are written from each tool's documentation and have not been run against the real tools.
