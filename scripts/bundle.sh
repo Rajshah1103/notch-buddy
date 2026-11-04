@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Builds a release NotchHub.app into build/ (ad-hoc signed, for local use only).
+# Builds a release NotchHub.app into build/. VERSION sets the version; ADHOC=1 ignores the local certificate
+# (releases must not be signed with a certificate that only exists on this Mac).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -22,7 +23,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key><string>Notch Hub</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleShortVersionString</key><string>${VERSION:-0.2.0}</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
@@ -39,7 +40,7 @@ PLIST
 if [[ -n "${DEVELOPER_ID:-}" ]]; then
     codesign --force --options runtime --timestamp --entitlements scripts/NotchHub.entitlements --sign "$DEVELOPER_ID" "$app"
     echo "Signed with: $DEVELOPER_ID"
-elif security find-identity -v -p codesigning 2>/dev/null | grep -q "Notch Hub Local"; then
+elif [[ -z "${ADHOC:-}" ]] && security find-identity -v -p codesigning 2>/dev/null | grep -q "Notch Hub Local"; then
     # A local certificate (see README) gives every build the same identity, so macOS keeps remembering
     # the permissions you granted instead of treating each rebuild as a new app.
     codesign --force --sign "Notch Hub Local" "$app"
