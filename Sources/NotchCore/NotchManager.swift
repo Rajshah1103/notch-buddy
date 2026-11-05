@@ -402,7 +402,8 @@ private final class NotchController {
         animateOutline(to: target, duration: 0.38, timing: CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1))
         edge.opacity = 0                    // ears are black like the hardware: no outline around them
         edge.strokeColor = NSColor.labelColor.withAlphaComponent(0.16).cgColor
-        fadeLive(visible: extra > 0, quickly: false)
+        // The live layer also holds the bubble: closing the ears must not fade it out from under a bubble on show.
+        fadeLive(visible: extra > 0 || state.bubbleSize != nil, quickly: false)
     }
 
     /// Shows or hides the event bubble under the collapsed notch. The pill grows downward with the ears' own
