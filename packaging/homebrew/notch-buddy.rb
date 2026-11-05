@@ -1,6 +1,6 @@
 cask "notch-buddy" do
-  version "0.2.0"
-  sha256 "6c3a5842301e83054168c00584d3c64630c38ddff40e7903e82bf95c9b7a8136"
+  version "1.0.0"
+  sha256 "524eee3111ef98c21fcbbf98fb17c30e3d60273e2657a12d1c50e71af10eb8ff"
 
   url "https://github.com/Rajshah1103/notch-buddy/releases/download/v#{version}/NotchBuddy-#{version}-arm64.zip"
   name "Notch Buddy"
