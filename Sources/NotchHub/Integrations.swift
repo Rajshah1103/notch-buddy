@@ -51,6 +51,16 @@ final class IntegrationHub: ObservableObject {
 
     var visible: [any NotchIntegration] { integrations.filter(\.isEnabled) }
 
+    /// Adds integrations found while running (a connector folder that was just added). The "+" stays last.
+    func append(_ more: [any NotchIntegration]) {
+        let known = Set(integrations.map(\.id))
+        let fresh = more.filter { !known.contains($0.id) }
+        guard !fresh.isEmpty else { return }
+        let last = integrations.firstIndex { $0.id == ConnectIntegration.id } ?? integrations.endIndex
+        integrations.insert(contentsOf: fresh, at: last)
+        apply()
+    }
+
     func integration(_ id: String) -> (any NotchIntegration)? { visible.first { $0.id == id } }
 
     /// Starts what is enabled and stops what is not.

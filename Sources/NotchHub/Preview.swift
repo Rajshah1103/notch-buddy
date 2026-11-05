@@ -55,8 +55,9 @@ enum Preview {
         AppSettings.shared.showGmail = true
         let hub = IntegrationHub(integrations: [ClaudeIntegration(model: claude), GitHubIntegration(model: github),
                                                 JenkinsIntegration(model: jenkins), CalendarIntegration(model: calendar),
-                                                GmailIntegration(model: gmail)])
-        PreviewSeed.integration = gmailPanel || gmailSetup ? "gmail" : claudePanel ? "claude" : githubPanel ? "github" : jenkinsPanel ? "jenkins" : calendarPanel ? "calendar" : nil
+                                                GmailIntegration(model: gmail), ConnectIntegration {}])
+        let connectPanel = ProcessInfo.processInfo.arguments.contains("--connect-panel")
+        PreviewSeed.integration = connectPanel ? "connect" : gmailPanel || gmailSetup ? "gmail" : claudePanel ? "claude" : githubPanel ? "github" : jenkinsPanel ? "jenkins" : calendarPanel ? "calendar" : nil
         let model = WindowsModel()
         for n in 0..<manyApps {
             let symbols = ["safari", "message", "music.note", "photo", "calendar", "envelope", "map", "doc.text", "gearshape", "terminal"]

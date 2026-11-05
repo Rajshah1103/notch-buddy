@@ -27,9 +27,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         JenkinsIntegration(model: jenkins),
         CalendarIntegration(model: calendar),
         GmailIntegration(model: gmail),
-    ] + ConnectorStore.load().map { found in
+    ] + ConnectorStore.load().map(makeConnector) + [
+        ConnectIntegration { [weak self] in self?.pickUpConnectors() },
+    ])
+
+    private func makeConnector(_ found: ConnectorStore.Found) -> ConnectorIntegration {
         ConnectorIntegration(model: ConnectorModel(found: found) { [moments] in moments.post(ExternalMoments.moment(from: $0)) })
-    })
+    }
+
+    /// A connector folder was added while the app runs: show it without a restart.
+    private func pickUpConnectors() {
+        hub.append(ConnectorStore.load().map(makeConnector))
+    }
     private let settings = AppSettings.shared
     private let presenter = WindowPresenter()
     private var notch: NotchManager?

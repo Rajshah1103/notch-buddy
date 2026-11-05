@@ -11,6 +11,8 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp .build/release/NotchHub "$app/Contents/MacOS/NotchHub"
 cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
+# Example connectors, offered by the "+" in the notch.
+cp -R examples/connectors "$app/Contents/Resources/ConnectorExamples"
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
