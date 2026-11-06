@@ -23,7 +23,9 @@ user can open (no network port), and `NotchHub emit` talks to it:
 
 Homebrew (Apple silicon, macOS 14 or later):
 
-    brew install --cask rajshah1103/tap/notch-buddy
+    brew tap rajshah1103/tap
+    brew trust rajshah1103/tap       (recent Homebrew asks you to trust a third-party tap once)
+    brew install --cask notch-buddy
 
 The app is not notarized yet; the cask clears the download quarantine for you. To build from source instead:
 

@@ -7,7 +7,7 @@ cask "notch-buddy" do
   desc "Turns the Mac notch into a live hub with a buddy that tells you what needs you"
   homepage "https://github.com/Rajshah1103/notch-buddy"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
   depends_on arch: :arm64
 
   app "Notch Hub.app"
