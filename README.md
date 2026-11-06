@@ -16,10 +16,16 @@ user can open (no network port), and `NotchHub emit` talks to it:
     NotchHub emit --source gitlab --headline "Pipeline failed" --detail "main" --url https://example.com --tint "#FC6D26"
 
 `--source` and `--headline` are required; `--detail`, `--url` (http or https), `--tint`, `--mood`, `--symbol`, `--ttl`,
-`--group` and `--id` are optional. `NotchHub agent --harness codex --session s1 --state working` already reaches the
-app, but the notch does not show agent activity yet. More (connectors, harness recipes) is planned.
+`--group` and `--id` are optional. `NotchHub agent --harness codex --session s1 --state working` shows that tool's activity in the notch. Connectors
+(a folder with a script) and recipes for other AI tools are in `docs/extending.md`.
 
 ## Install and run
+
+Homebrew (Apple silicon, macOS 14 or later):
+
+    brew install --cask rajshah1103/tap/notch-buddy
+
+The app is not notarized yet; the cask clears the download quarantine for you. To build from source instead:
 
     ./scripts/install.sh        builds, installs to /Applications/Notch Hub.app, and opens it
 
